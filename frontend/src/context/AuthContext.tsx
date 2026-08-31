@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User } from "../types";
-import { loginApi, registerApi } from "../lib/api";
+import { fetchApi } from "../lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -10,7 +10,16 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, city?: string, categories?: string[]) => Promise<void>;
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    city?: string,
+    cuisines?: string[],
+    areas?: string[],
+    dietaryPref?: string,
+    budget?: string
+  ) => Promise<void>;
   logout: () => void;
   switchDemoUser: (email: string) => Promise<void>;
 }
@@ -22,8 +31,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("bharatkart_user");
-    const savedToken = localStorage.getItem("bharatkart_token");
+    const savedUser = localStorage.getItem("dinewise_user");
+    const savedToken = localStorage.getItem("dinewise_token");
     if (savedUser && savedToken) {
       try {
         setUser(JSON.parse(savedUser));
@@ -32,53 +41,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error(e);
       }
     } else {
-      // Default demo login as Aarav Sharma for immediate personalized experience
+      // Default demo login as Aarav Sharma (Biryani Enthusiast)
       const demoUser: User = {
         id: 1,
         name: "Aarav Sharma",
         email: "aarav.sharma@example.in",
         role: "user",
-        city: "Bengaluru",
-        preferences: JSON.stringify({ categories: ["Electronics & Audio", "Footwear"] }),
+        city: "Hyderabad",
+        dietary_pref: "Non-Veg",
+        preferred_budget: "Moderate",
+        preferred_cuisines: ["Biryani", "Mughlai", "Street Food"],
+        preferred_areas: ["Secunderabad", "Tolichowki", "Charminar"],
         created_at: new Date().toISOString(),
       };
       setUser(demoUser);
       setToken("demo_token_aarav");
-      localStorage.setItem("bharatkart_user", JSON.stringify(demoUser));
-      localStorage.setItem("bharatkart_token", "demo_token_aarav");
+      localStorage.setItem("dinewise_user", JSON.stringify(demoUser));
+      localStorage.setItem("dinewise_token", "demo_token_aarav");
     }
   }, []);
 
   const login = async (email: string, password: string) => {
-    const res = await loginApi(email, password);
+    const res = await fetchApi<any>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
     setUser(res.user);
     setToken(res.access_token);
-    localStorage.setItem("bharatkart_user", JSON.stringify(res.user));
-    localStorage.setItem("bharatkart_token", res.access_token);
+    localStorage.setItem("dinewise_user", JSON.stringify(res.user));
+    localStorage.setItem("dinewise_token", res.access_token);
   };
 
-  const register = async (name: string, email: string, password: string, city?: string, categories?: string[]) => {
-    const res = await registerApi(name, email, password, city, categories);
+  const register = async (
+    name: string,
+    email: string,
+    password: string,
+    city: string = "Hyderabad",
+    cuisines: string[] = ["Biryani"],
+    areas: string[] = ["Banjara Hills"],
+    dietaryPref: string = "All",
+    budget: string = "Moderate"
+  ) => {
+    const res = await fetchApi<any>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        city,
+        preferred_cuisines: cuisines,
+        preferred_areas: areas,
+        dietary_pref: dietaryPref,
+        preferred_budget: budget
+      }),
+    });
     setUser(res.user);
     setToken(res.access_token);
-    localStorage.setItem("bharatkart_user", JSON.stringify(res.user));
-    localStorage.setItem("bharatkart_token", res.access_token);
+    localStorage.setItem("dinewise_user", JSON.stringify(res.user));
+    localStorage.setItem("dinewise_token", res.access_token);
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem("bharatkart_user");
-    localStorage.removeItem("bharatkart_token");
+    localStorage.removeItem("dinewise_user");
+    localStorage.removeItem("dinewise_token");
   };
 
   const switchDemoUser = async (email: string) => {
     try {
-      await login(email, "password123");
+      const password = email.includes("admin") ? "adminpassword" : "password123";
+      await login(email, password);
     } catch (e) {
-      if (email.includes("admin")) {
-        await login(email, "adminpassword");
-      }
+      console.error("Demo user switch error", e);
     }
   };
 

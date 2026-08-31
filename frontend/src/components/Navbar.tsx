@@ -4,240 +4,298 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Search, ShoppingCart, Heart, User as UserIcon,
-  Sparkles, MapPin, Moon, Sun, Scale,
-  ChevronDown, LogOut, ShieldAlert, Cpu
+  Search, Heart, Sparkles, Moon, Sun, User as UserIcon,
+  ChevronDown, MapPin, SlidersHorizontal, Scale, BarChart3,
+  LogOut, Shield, UtensilsCrossed, Store
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { useCartWishlist } from "../context/CartWishlistContext";
+import { useFavorites } from "../context/FavoritesContext";
 import { useTheme } from "../context/ThemeContext";
+import { useToast } from "../context/ToastContext";
+import SmartSearchModal from "./SmartSearchModal";
 import VoiceSearchButton from "./VoiceSearchButton";
 
-interface NavbarProps {
-  onOpenSearchModal: () => void;
-}
+const HYDERABAD_AREAS = [
+  "All Hyderabad", "Banjara Hills", "Jubilee Hills", "Madhapur",
+  "Gachibowli", "Charminar", "Tolichowki", "Secunderabad", "Hitech City", "Kukatpally"
+];
 
-export default function Navbar({ onOpenSearchModal }: NavbarProps) {
+export default function Navbar() {
   const router = useRouter();
-  const { user, logout, switchDemoUser, isAdmin } = useAuth();
-  const { cartCount, wishlistCount, setIsCartDrawerOpen } = useCartWishlist();
+  const { user, logout, switchDemoUser } = useAuth();
+  const { favoritesCount } = useFavorites();
   const { isDarkMode, toggleTheme } = useTheme();
+  const { showToast } = useToast();
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedArea, setSelectedArea] = useState("All Hyderabad");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [locationCity, setLocationCity] = useState("Mumbai 400001");
+
+  const handleAreaChange = (area: string) => {
+    setSelectedArea(area);
+    if (area === "All Hyderabad") {
+      router.push("/restaurants");
+    } else {
+      router.push(`/restaurants?area=${encodeURIComponent(area)}`);
+    }
+  };
+
+  const handleSwitchPersona = async (email: string, name: string, segment: string) => {
+    await switchDemoUser(email);
+    setIsUserMenuOpen(false);
+    showToast(
+      `🎭 Switched to ${name}`,
+      `Taste profile calibrated to ${segment}. Recommendations updating.`,
+      "success"
+    );
+  };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-white/95 dark:bg-slate-900/95 backdrop-blur border-slate-200 dark:border-slate-800 transition-colors shadow-sm">
-      {/* Top micro banner for Indian Context */}
-      <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-emerald-700 text-white text-xs py-1.5 px-4 font-medium flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <span className="bg-white/20 px-2 py-0.5 rounded text-[11px] font-bold tracking-wide">🇮🇳 BHARAT AI COMMERCE</span>
-          <span className="hidden sm:inline">Next-Gen Hybrid Recommendation Engine & Customer Behavior Intelligence</span>
-        </div>
-        <div className="flex items-center gap-4 text-[11px]">
-          <span className="hidden md:inline">⚡ Free 1-Day Delivery across 19,000+ PIN Codes</span>
-          <div className="flex items-center gap-1.5 bg-black/20 px-2 py-0.5 rounded">
-            <Cpu className="w-3 h-3 text-amber-300" />
-            <span className="font-semibold text-amber-200">Active AI: TF-IDF + Collaborative Matrix</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 gap-4">
-          {/* Brand Logo */}
-          <Link href="/" className="flex items-center gap-2 group flex-shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white font-black text-xl shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform">
-              भ
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                  Bharat<span className="text-orange-600 dark:text-orange-500">Kart</span>
+    <>
+      <header className="sticky top-0 z-40 w-full bg-white/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
+          {/* Left: Brand Logo & Location */}
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform">
+                <UtensilsCrossed className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col">
+                <span className="font-black text-xl tracking-tight text-slate-900 dark:text-white leading-none">
+                  Dine<span className="text-orange-600">Wise</span>{" "}
+                  <span className="text-xs px-1.5 py-0.5 rounded-md bg-orange-100 dark:bg-orange-950 text-orange-600 font-bold">
+                    AI
+                  </span>
                 </span>
-                <span className="bg-orange-100 dark:bg-orange-950/80 text-orange-700 dark:text-orange-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-orange-200 dark:border-orange-800 flex items-center gap-0.5">
-                  <Sparkles className="w-2.5 h-2.5" /> AI
+                <span className="text-[9.5px] font-semibold text-slate-400 dark:text-slate-500 tracking-wider uppercase">
+                  Hyderabad Dining
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden sm:block tracking-wider">
-                INTELLIGENT INDIAN COMMERCE
-              </span>
-            </div>
-          </Link>
+            </Link>
 
-          {/* Delivery Location Pin */}
-          <div className="hidden lg:flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 border-l border-slate-200 dark:border-slate-800 pl-4">
-            <MapPin className="w-4 h-4 text-orange-600 dark:text-orange-500 flex-shrink-0" />
-            <div>
-              <p className="text-[10px] text-slate-400 uppercase font-medium">Deliver to</p>
-              <p className="font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[110px]">
-                {user?.city || "Mumbai"} 400001
-              </p>
+            {/* Hyderabad Area Selector */}
+            <div className="hidden md:flex items-center gap-1.5 pl-3 border-l border-slate-200 dark:border-slate-800 text-xs">
+              <MapPin className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+              <select
+                value={selectedArea}
+                onChange={(e) => handleAreaChange(e.target.value)}
+                className="bg-transparent text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer pr-1"
+              >
+                {HYDERABAD_AREAS.map((a) => (
+                  <option key={a} value={a} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                    {a}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Search Trigger Bar */}
-          <div className="flex-1 max-w-2xl relative">
+          {/* Center: Smart Search Trigger Bar */}
+          <div className="flex-1 max-w-md hidden sm:block">
             <div
-              onClick={onOpenSearchModal}
-              className="w-full flex items-center gap-3 px-4 py-2.5 bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200/70 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-full cursor-pointer transition-all shadow-inner group"
+              onClick={() => setIsSearchOpen(true)}
+              className="flex items-center justify-between w-full px-3.5 py-2 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-orange-500/60 cursor-pointer text-xs text-slate-400 transition-all shadow-inner group"
             >
-              <Search className="w-4 h-4 text-slate-400 group-hover:text-orange-500 transition-colors" />
-              <span className="text-sm text-slate-500 dark:text-slate-400 truncate flex-1">
-                Try <span className="text-orange-600 dark:text-orange-400 font-medium">"black shoes under 2000"</span>, "hyderabadi biryani", or brand...
-              </span>
-              <VoiceSearchButton onSearch={(query) => {
-                router.push(`/products?q=${encodeURIComponent(query)}`);
-              }} />
-              <kbd className="hidden md:inline-flex items-center px-2 py-0.5 text-[10px] font-medium text-slate-500 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded shadow-sm">
-                ⌘K
-              </kbd>
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-slate-400 group-hover:text-orange-600 transition-colors" />
+                <span className="truncate">
+                  Search &quot;Biryani under 500 in Tolichowki&quot;...
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <VoiceSearchButton
+                  onTranscript={(text) => {
+                    setIsSearchOpen(true);
+                  }}
+                />
+                <kbd className="hidden lg:inline-block px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-slate-400">
+                  NLP
+                </kbd>
+              </div>
             </div>
           </div>
 
-          {/* Right Action Icons */}
-          <div className="flex items-center gap-1 sm:gap-3">
-            {/* Dark Mode Toggle */}
+          {/* Right: Actions, Navigation & Persona Switcher */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Mobile Search Button */}
             <button
-              onClick={toggleTheme}
-              className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Toggle Theme"
+              onClick={() => setIsSearchOpen(true)}
+              className="sm:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              aria-label="Search"
             >
-              {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
+              <Search className="w-5 h-5" />
             </button>
 
-            {/* Compare */}
+            {/* Explore Restaurants */}
+            <Link
+              href="/restaurants"
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition"
+            >
+              <Store className="w-4 h-4" />
+              <span>Restaurants</span>
+            </Link>
+
+            {/* Compare Tool */}
             <Link
               href="/compare"
-              className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors hidden sm:flex"
-              title="Compare Products"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition relative"
+              title="Compare Restaurants"
             >
               <Scale className="w-5 h-5" />
             </Link>
 
-            {/* Wishlist */}
+            {/* Favorites Icon with Badge */}
             <Link
-              href="/wishlist"
-              className="relative p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Wishlist"
+              href="/favorites"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition relative"
+              title="Saved Favorites"
             >
               <Heart className="w-5 h-5" />
-              {wishlistCount > 0 && (
-                <span className="absolute top-0 right-0 w-4 h-4 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-                  {wishlistCount}
+              {favoritesCount > 0 && (
+                <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center animate-scaleIn">
+                  {favoritesCount}
                 </span>
               )}
             </Link>
 
-            {/* Cart Drawer Trigger */}
-            <button
-              onClick={() => setIsCartDrawerOpen(true)}
-              className="relative flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/50 hover:bg-orange-100 dark:hover:bg-orange-900/50 text-orange-600 dark:text-orange-400 rounded-full border border-orange-200 dark:border-orange-800/80 transition-colors font-medium text-sm"
-              title="View Cart"
+            {/* Admin Analytics Portal */}
+            <Link
+              href="/admin"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-950/60 border border-orange-200 dark:border-orange-800/60 text-orange-700 dark:text-orange-300 text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900 transition"
+              title="AI Analytics & Telemetry"
             >
-              <ShoppingCart className="w-5 h-5" />
-              <span className="hidden md:inline text-xs font-semibold">Cart</span>
-              {cartCount > 0 && (
-                <span className="w-5 h-5 bg-orange-600 text-white text-[11px] font-bold rounded-full flex items-center justify-center">
-                  {cartCount}
-                </span>
-              )}
+              <BarChart3 className="w-3.5 h-3.5 text-orange-600" />
+              <span className="hidden xl:inline">AI Analytics</span>
+            </Link>
+
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition"
+              aria-label="Toggle theme"
+            >
+              {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
             </button>
 
-            {/* User Account / Profile Menu with Quick Persona Switch */}
+            {/* User Profile & 1-Click Persona Switcher */}
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+                className="flex items-center gap-2 p-1.5 pl-2 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-orange-500 transition bg-slate-50 dark:bg-slate-900"
               >
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                  {user?.name ? user.name[0] : "G"}
+                <div className="w-6 h-6 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-center text-[11px] font-black">
+                  {user ? user.name[0] : "A"}
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200 hidden md:inline truncate max-w-[100px]">
+                  {user ? user.name.split(" ")[0] : "Aarav"}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
 
+              {/* Persona Switcher Dropdown */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-3 z-50 text-sm animate-in fade-in zoom-in-95">
-                  {/* Current Persona Header */}
-                  <div className="px-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                    <p className="font-semibold text-slate-900 dark:text-white">{user?.name || "Guest Shopper"}</p>
-                    <p className="text-xs text-slate-500 truncate">{user?.email || "Browsing as guest"}</p>
-                    <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-medium text-slate-600 dark:text-slate-300">
-                      <span>📍 {user?.city || "India"}</span>
-                      {isAdmin && <span className="text-orange-600 font-bold ml-1">• Admin</span>}
-                    </div>
-                  </div>
-
-                  {/* Navigation Links */}
-                  <div className="py-2 border-b border-slate-100 dark:border-slate-800">
-                    <Link
-                      href="/orders"
-                      onClick={() => setIsUserMenuOpen(false)}
-                      className="block px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
-                    >
-                      📦 My Orders
-                    </Link>
-                    <Link
-                      href="/wishlist"
-                      onClick={() => setIsUserMenuOpen(false)}
-                      className="block px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
-                    >
-                      ❤️ My Wishlist
-                    </Link>
-                    <Link
-                      href="/compare"
-                      onClick={() => setIsUserMenuOpen(false)}
-                      className="block px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200"
-                    >
-                      ⚖️ Product Comparison
-                    </Link>
-                    <Link
-                      href="/admin"
-                      onClick={() => setIsUserMenuOpen(false)}
-                      className="block px-4 py-2 bg-orange-50/70 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 text-orange-700 dark:text-orange-300 font-semibold"
-                    >
-                      📊 AI Admin & Analytics Dashboard
-                    </Link>
-                  </div>
-
-                  {/* Quick Persona Switcher for Evaluation */}
-                  <div className="px-4 pt-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                      Switch Persona (AI Demo)
+                <div
+                  className="absolute right-0 mt-2 w-72 rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-3 text-xs space-y-3 z-50 animate-fadeIn"
+                  onMouseLeave={() => setIsUserMenuOpen(false)}
+                >
+                  <div className="p-2.5 rounded-2xl bg-orange-50/70 dark:bg-orange-950/40 border border-orange-200/60 dark:border-orange-800/60">
+                    <p className="font-black text-slate-900 dark:text-white">
+                      {user?.name}
                     </p>
-                    <div className="grid grid-cols-2 gap-1.5 text-xs">
-                      <button
-                        onClick={() => { switchDemoUser("aarav.sharma@example.in"); setIsUserMenuOpen(false); }}
-                        className={`px-2 py-1 rounded text-left border ${user?.email.includes("aarav") ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950 dark:border-orange-700 dark:text-orange-300 font-bold" : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
-                      >
-                        Aarav (Tech/Footwear)
-                      </button>
-                      <button
-                        onClick={() => { switchDemoUser("priya.patel@example.in"); setIsUserMenuOpen(false); }}
-                        className={`px-2 py-1 rounded text-left border ${user?.email.includes("priya") ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950 dark:border-orange-700 dark:text-orange-300 font-bold" : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
-                      >
-                        Priya (Ethnic/Beauty)
-                      </button>
-                      <button
-                        onClick={() => { switchDemoUser("ananya.m@example.in"); setIsUserMenuOpen(false); }}
-                        className={`px-2 py-1 rounded text-left border ${user?.email.includes("ananya") ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950 dark:border-orange-700 dark:text-orange-300 font-bold" : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
-                      >
-                        Ananya (Food/Sweets)
-                      </button>
-                      <button
-                        onClick={() => { switchDemoUser("admin@bharatkart.in"); setIsUserMenuOpen(false); }}
-                        className={`px-2 py-1 rounded text-left border ${user?.email.includes("admin") ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950 dark:border-orange-700 dark:text-orange-300 font-bold" : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"}`}
-                      >
-                        Admin Nadeem
-                      </button>
+                    <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                    <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-orange-700 dark:text-orange-300 font-bold">
+                      <Sparkles className="w-3 h-3 text-orange-600" />
+                      <span>{user?.dietary_pref || "Non-Veg"} • {user?.preferred_budget || "Moderate"}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800 px-4">
+                  {/* 1-Click Demo Personas */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">
+                      Switch Demo Persona (1-Click)
+                    </span>
                     <button
-                      onClick={() => { logout(); setIsUserMenuOpen(false); }}
-                      className="w-full text-left py-1 text-xs text-rose-600 hover:text-rose-700 flex items-center gap-1.5"
+                      onClick={() => handleSwitchPersona("aarav.sharma@example.in", "Aarav Sharma", "Biryani Enthusiast")}
+                      className="w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between"
                     >
-                      <LogOut className="w-3.5 h-3.5" /> Sign Out
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">Aarav Sharma</p>
+                        <p className="text-[10.5px] text-slate-400">Biryani & Mughlai Enthusiast</p>
+                      </div>
+                      {user?.email === "aarav.sharma@example.in" && (
+                        <span className="text-[10px] font-bold text-orange-600">Active</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSwitchPersona("priya.patel@example.in", "Priya Patel", "Vegetarian Explorer")}
+                      className="w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">Priya Patel</p>
+                        <p className="text-[10.5px] text-slate-400">Vegetarian South Indian Explorer</p>
+                      </div>
+                      {user?.email === "priya.patel@example.in" && (
+                        <span className="text-[10px] font-bold text-orange-600">Active</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSwitchPersona("rohan.verma@example.in", "Rohan Verma", "Premium Diner")}
+                      className="w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">Rohan Verma</p>
+                        <p className="text-[10.5px] text-slate-400">Premium Diner (Italian & Cafes)</p>
+                      </div>
+                      {user?.email === "rohan.verma@example.in" && (
+                        <span className="text-[10px] font-bold text-orange-600">Active</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSwitchPersona("ananya.m@example.in", "Ananya Mukherjee", "Budget Explorer")}
+                      className="w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">Ananya Mukherjee</p>
+                        <p className="text-[10.5px] text-slate-400">Budget Explorer (Haleem & Street Food)</p>
+                      </div>
+                      {user?.email === "ananya.m@example.in" && (
+                        <span className="text-[10px] font-bold text-orange-600">Active</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleSwitchPersona("admin@dinewise.in", "Admin Nadeem", "System Administrator")}
+                      className="w-full text-left p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center justify-between text-orange-600"
+                    >
+                      <div>
+                        <p className="font-bold">Admin Nadeem</p>
+                        <p className="text-[10.5px] text-slate-400">Analytics & Model Benchmarks</p>
+                      </div>
+                      {user?.role === "admin" && (
+                        <span className="text-[10px] font-bold text-orange-600">Active</span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+                    <Link
+                      href="/favorites"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="text-slate-600 dark:text-slate-300 font-semibold hover:text-orange-600"
+                    >
+                      My Favorites ({favoritesCount})
+                    </Link>
+                    <button
+                      onClick={() => {
+                        logout();
+                        setIsUserMenuOpen(false);
+                      }}
+                      className="text-rose-500 font-bold flex items-center gap-1 hover:underline"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Logout
                     </button>
                   </div>
                 </div>
@@ -245,38 +303,13 @@ export default function Navbar({ onOpenSearchModal }: NavbarProps) {
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Quick Category Sub-Navigation */}
-        <nav className="flex items-center gap-6 overflow-x-auto py-2 text-xs font-medium text-slate-600 dark:text-slate-300 border-t border-slate-100 dark:border-slate-800/60 no-scrollbar">
-          <Link href="/products" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap font-bold flex items-center gap-1">
-            <span>✨ All Categories</span>
-          </Link>
-          <Link href="/products?category=Ethnic%20%26%20Fashion" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Ethnic & Fashion
-          </Link>
-          <Link href="/products?category=Electronics%20%26%20Audio" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Electronics & Audio
-          </Link>
-          <Link href="/products?category=Footwear" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Footwear
-          </Link>
-          <Link href="/products?category=Indian%20Delicacies%20%26%20Sweets" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Biryani & Indian Sweets
-          </Link>
-          <Link href="/products?category=Groceries%20%26%20Spices" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Groceries & Desi Ghee
-          </Link>
-          <Link href="/products?category=Beauty%20%26%20Ayurveda" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Beauty & Ayurveda
-          </Link>
-          <Link href="/products?category=Home%20%26%20Kitchen" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Home & Kitchen
-          </Link>
-          <Link href="/products?category=Watches%20%26%20Accessories" className="hover:text-orange-600 dark:hover:text-orange-400 whitespace-nowrap">
-            Watches & Accessories
-          </Link>
-        </nav>
-      </div>
-    </header>
+      {/* Smart Search Modal */}
+      <SmartSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
+    </>
   );
 }

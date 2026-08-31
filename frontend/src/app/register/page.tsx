@@ -3,13 +3,17 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, User, MapPin, ArrowRight, Check } from "lucide-react";
+import { Lock, Mail, User as UserIcon, MapPin, ArrowRight, Check, UtensilsCrossed } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
-const CATEGORY_OPTIONS = [
-  "Ethnic & Fashion", "Electronics & Audio", "Footwear",
-  "Indian Delicacies & Sweets", "Groceries & Spices", "Beauty & Ayurveda",
-  "Home & Kitchen", "Watches & Accessories"
+const CUISINE_OPTIONS = [
+  "Biryani", "Mughlai", "South Indian", "North Indian",
+  "Chinese", "Italian & Pizza", "Cafe & Bistro", "Bakery & Desserts", "Street Food", "Healthy Food"
+];
+
+const HYDERABAD_AREAS = [
+  "Banjara Hills", "Jubilee Hills", "Madhapur", "Gachibowli",
+  "Charminar", "Tolichowki", "Secunderabad", "Hitech City", "Kukatpally"
 ];
 
 export default function RegisterPage() {
@@ -19,16 +23,27 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [city, setCity] = useState("Mumbai");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(["Ethnic & Fashion"]);
+  const [city, setCity] = useState("Hyderabad");
+  const [dietaryPref, setDietaryPref] = useState("All");
+  const [budget, setBudget] = useState("Moderate");
+  const [selectedCuisines, setSelectedCuisines] = useState<string[]>(["Biryani"]);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>(["Banjara Hills"]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const toggleCategory = (cat: string) => {
-    if (selectedCategories.includes(cat)) {
-      setSelectedCategories(selectedCategories.filter((c) => c !== cat));
+  const toggleCuisine = (cuis: string) => {
+    if (selectedCuisines.includes(cuis)) {
+      setSelectedCuisines(selectedCuisines.filter((c) => c !== cuis));
     } else {
-      setSelectedCategories([...selectedCategories, cat]);
+      setSelectedCuisines([...selectedCuisines, cuis]);
+    }
+  };
+
+  const toggleArea = (area: string) => {
+    if (selectedAreas.includes(area)) {
+      setSelectedAreas(selectedAreas.filter((a) => a !== area));
+    } else {
+      setSelectedAreas([...selectedAreas, area]);
     }
   };
 
@@ -37,7 +52,7 @@ export default function RegisterPage() {
     setIsLoading(true);
     setError("");
     try {
-      await register(name, email, password, city, selectedCategories);
+      await register(name, email, password, city, selectedCuisines, selectedAreas, dietaryPref, budget);
       router.push("/");
     } catch (err: any) {
       setError(err.message || "Registration failed");
@@ -48,16 +63,16 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 shadow-xl space-y-6">
+      <div className="w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 shadow-2xl space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-orange-600 text-white flex items-center justify-center mx-auto text-xl font-bold">
-            भ
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center mx-auto text-xl font-bold">
+            <UtensilsCrossed className="w-6 h-6" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">
-            Create Your Indian Account
+            Create Your Foodie Profile
           </h2>
           <p className="text-xs text-slate-500">
-            Tell us your preferences so our AI Recommendation Engine starts customized for you
+            Calibrate your dining taste preferences so DineWise AI starts recommending restaurants tailored to your palate
           </p>
         </div>
 
@@ -69,7 +84,9 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Your Full Name</label>
+            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Your Full Name
+            </label>
             <div className="relative">
               <input
                 type="text"
@@ -77,14 +94,16 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Rohan Sharma"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
               />
-              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
           <div>
-            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Email Address</label>
+            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Email Address
+            </label>
             <div className="relative">
               <input
                 type="email"
@@ -92,14 +111,16 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="rohan@example.in"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
               />
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
           <div>
-            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Password</label>
+            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+              Password
+            </label>
             <div className="relative">
               <input
                 type="password"
@@ -107,45 +128,63 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
               />
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
-          <div>
-            <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">Your City (India)</label>
-            <div className="relative">
-              <input
-                type="text"
-                required
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="Delhi / Bengaluru / Mumbai / Hyderabad"
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white"
-              />
-              <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Dietary Preference
+              </label>
+              <select
+                value={dietaryPref}
+                onChange={(e) => setDietaryPref(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+              >
+                <option value="All">All (Veg & Non-Veg)</option>
+                <option value="Pure Veg">Pure Vegetarian</option>
+                <option value="Non-Veg">Non-Vegetarian</option>
+                <option value="Halal">Halal</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Typical Budget
+              </label>
+              <select
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
+              >
+                <option value="Budget Friendly">Budget Friendly (≤ ₹500)</option>
+                <option value="Moderate">Moderate (₹500 - ₹1000)</option>
+                <option value="Premium / Fine Dining">Premium / Fine Dining (&gt; ₹1000)</option>
+              </select>
             </div>
           </div>
 
           <div>
             <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-              Select Categories You Love (Cold-Start Customization)
+              Select Cuisines You Crave (Cold-Start Calibration)
             </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {CATEGORY_OPTIONS.map((cat) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {CUISINE_OPTIONS.map((cuis) => (
                 <button
                   type="button"
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
+                  key={cuis}
+                  onClick={() => toggleCuisine(cuis)}
                   className={`p-2 rounded-xl text-left border flex items-center justify-between text-[11px] font-medium transition-all ${
-                    selectedCategories.includes(cat)
+                    selectedCuisines.includes(cuis)
                       ? "bg-orange-50 dark:bg-orange-950 border-orange-500 text-orange-700 dark:text-orange-300 font-bold"
-                      : "border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                      : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <span className="truncate">{cat}</span>
-                  {selectedCategories.includes(cat) && <Check className="w-3 h-3 text-orange-600 flex-shrink-0" />}
+                  <span className="truncate">{cuis}</span>
+                  {selectedCuisines.includes(cuis) && <Check className="w-3 h-3 text-orange-600 flex-shrink-0" />}
                 </button>
               ))}
             </div>
@@ -156,7 +195,7 @@ export default function RegisterPage() {
             disabled={isLoading}
             className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
           >
-            <span>{isLoading ? "Creating Profile..." : "Create Account & Start Shopping"}</span>
+            <span>{isLoading ? "Creating Taste Profile..." : "Create Account & Start Exploring"}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>

@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 
 interface ThemeContextType {
   isDarkMode: boolean;
+  theme: "dark" | "light";
   toggleTheme: () => void;
 }
 
@@ -13,7 +14,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("bharatkart_theme");
+    const savedTheme = localStorage.getItem("bharatbite_theme");
     if (savedTheme === "dark") {
       setIsDarkMode(true);
       document.documentElement.classList.add("dark");
@@ -28,17 +29,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const next = !prev;
       if (next) {
         document.documentElement.classList.add("dark");
-        localStorage.setItem("bharatkart_theme", "dark");
+        localStorage.setItem("bharatbite_theme", "dark");
       } else {
         document.documentElement.classList.remove("dark");
-        localStorage.setItem("bharatkart_theme", "light");
+        localStorage.setItem("bharatbite_theme", "light");
       }
       return next;
     });
   };
 
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+    <ThemeContext.Provider value={{ isDarkMode, theme: isDarkMode ? "dark" : "light", toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

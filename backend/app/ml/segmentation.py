@@ -1,58 +1,69 @@
-from typing import List, Dict, Any
+import json
+from collections import Counter
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from ..models import User, Order, Interaction, Product
-from ..schemas import CustomerSegmentItem
+from ..models import User, Interaction, Favorite, Rating, Restaurant
 
-def compute_customer_segments(db: Session) -> List[CustomerSegmentItem]:
-    """
-    Segment users based on their spending, order volume, interaction patterns, and category preference.
-    """
-    users = db.query(User).all()
-    results = []
+class CustomerSegmentationEngine:
+    def segment_users(self, db: Session):
+        users = db.query(User).all()
+        segments = []
 
-    for user in users:
-        # Calculate total spend and order count
-        orders = db.query(Order).filter(Order.user_id == user.id).all()
-        total_spend = sum(o.total_amount for o in orders)
-        order_count = len(orders)
+        for u in users:
+            interactions = db.query(Interaction).filter(Interaction.user_id == u.id).all()
+            favorites = db.query(Favorite).filter(Favorite.user_id == u.id).all()
+            ratings = db.query(Rating).filter(Rating.user_id == u.id).all()
 
-        # Calculate interactions
-        interactions = db.query(Interaction).filter(Interaction.user_id == user.id).all()
-        interaction_count = len(interactions)
-        
-        # Determine preferred category
-        cat_counts: Dict[str, int] = {}
-        for inter in interactions:
-            if inter.product and inter.product.category:
-                c = inter.product.category
-                cat_counts[c] = cat_counts.get(c, 0) + 1
-        
-        preferred_cat = max(cat_counts.items(), key=lambda x: x[1])[0] if cat_counts else "Ethnic & Fashion"
+            # Gather restaurant details for all interactions
+            interacted_restaurant_ids = [i.restaurant_id for i in interactions] + [f.restaurant_id for f in favorites]
+            
+            cuisines = []
+            areas = []
+            prices = []
+            veg_flags = []
 
-        # Segmentation Logic
-        if order_count >= 2 and total_spend >= 5000:
-            segment = "Premium Buyer"
-        elif order_count >= 2:
-            segment = "Frequent Buyer"
-        elif interaction_count >= 4 and total_spend > 0 and (total_spend / max(1, order_count)) < 2500:
-            segment = "Budget Shopper"
-        elif interaction_count >= 3 and order_count == 0:
-            segment = "Window Shopper"
-        elif total_spend >= 4000:
-            segment = "Premium Buyer"
-        else:
-            segment = "Budget Shopper"
+            for r_id in interacted_restaurant_ids:
+                r = db.query(Restaurant).filter(Restaurant.id == r_id).first()
+                if r:
+                    cuisines.append(r.cuisine)
+                    areas.append(r.area)
+                    prices.append(r.price_for_two)
+                    veg_flags.append(r.veg_type)
 
-        results.append(CustomerSegmentItem(
-            user_id=user.id,
-            name=user.name,
-            email=user.email,
-            total_spend=round(total_spend, 2),
-            total_orders=order_count,
-            total_interactions=interaction_count,
-            segment=segment,
-            preferred_category=preferred_cat
-        ))
+            total_hits = len(interactions) + len(favorites) + len(ratings)
+            avg_budget = float(sum(prices) / len(prices)) if prices else 600.0
 
-    return results
+            cuisine_counter = Counter(cuisines)
+            area_counter = Counter(areas)
+
+            top_cuisine = cuisine_counter.most_common(1)[0][0] if cuisine_counter else (json.loads(u.preferred_cuisines or "[\"Biryani\"]")[0] if u.preferred_cuisines else "Biryani")
+            top_area = area_counter.most_common(1)[0][0] if area_counter else "Banjara Hills"
+
+            # Behavioral Rules for Clustering
+            if u.dietary_pref == "Pure Veg" or (veg_flags and all(v == "veg" for v in veg_flags)):
+                segment_label = "Vegetarian Explorer"
+            elif top_cuisine in ["Biryani", "Mughlai"] and cuisine_counter.get("Biryani", 0) + cuisine_counter.get("Mughlai", 0) >= 2:
+                segment_label = "Biryani Enthusiast"
+            elif avg_budget >= 1000.0 or top_cuisine in ["Italian & Pizza", "Cafe & Bistro"]:
+                segment_label = "Premium Diner"
+            elif avg_budget <= 500.0:
+                segment_label = "Budget Explorer"
+            elif len(cuisine_counter) >= 3:
+                segment_label = "Cuisine Explorer"
+            else:
+                segment_label = "Frequent Restaurant Browser"
+
+            segments.append({
+                "user_id": u.id,
+                "name": u.name,
+                "email": u.email,
+                "segment": segment_label,
+                "preferred_cuisine": top_cuisine,
+                "preferred_area": top_area,
+                "total_interactions": len(interactions),
+                "total_favorites": len(favorites),
+                "avg_budget_affinity": round(avg_budget, 1)
+            })
+
+        return segments
+
+customer_segmentation_engine = CustomerSegmentationEngine()

@@ -1,197 +1,194 @@
-from typing import List, Optional, Dict, Any
+import json
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
 from ..database import get_db
-from ..models import Product, Interaction
-from ..schemas import ProductResponse
-from ..ml.hybrid_engine import hybrid_engine
-from ..ml.collaborative_engine import collaborative_engine
-from ..ml.content_engine import content_engine
+from ..models import Restaurant, CuisineCategory, User, Favorite, RecommendationFeedback
+from ..schemas import HomepageFeed, RestaurantOut, CuisineOut
+from ..ml.hybrid_engine import restaurant_hybrid_engine
 
 router = APIRouter(prefix="/recommendations", tags=["Recommendations"])
 
-@router.get("/personalized", response_model=List[ProductResponse])
-def get_personalized_recommendations(
-    user_id: Optional[int] = None,
-    session_id: Optional[str] = None,
-    category: Optional[str] = None,
-    limit: int = 8,
+@router.get("/feed", response_model=HomepageFeed)
+def get_recommendations_feed(
+    user_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    """
-    Generate Hybrid Content-Collaborative Recommendations with explainable reasons.
-    """
-    recs = hybrid_engine.get_recommendations(
+    # 1. AI Picks For You (Hybrid Scoring)
+    hybrid_items = restaurant_hybrid_engine.get_hybrid_recommendations(
         db=db,
         user_id=user_id,
         session_id=session_id,
-        category=category,
-        limit=limit
+        limit=6
     )
+    picked_for_you = [_to_restaurant_out(item) for item in hybrid_items]
 
-    results = []
-    for prod, match_pct, reason in recs:
-        p_res = ProductResponse.from_orm(prod)
-        p_res.match_score = match_pct
-        p_res.recommendation_reason = reason
-        results.append(p_res)
+    # 2. Trending in Hyderabad (High ratings & review counts)
+    trending_db = db.query(Restaurant).order_by(Restaurant.review_count.desc(), Restaurant.rating.desc()).limit(6).all()
+    user_fav_ids = _get_user_favs(user_id, db)
+    trending_hyderabad = [
+        _to_restaurant_out_from_db(
+            r,
+            match_score=92,
+            reason=f"Trending right now with {r.review_count}+ foodie reviews in {r.area}.",
+            is_fav=r.id in user_fav_ids
+        )
+        for r in trending_db
+    ]
 
-    return results
+    # 3. Top Rated Restaurants (4.8+ Stars)
+    top_db = db.query(Restaurant).filter(Restaurant.rating >= 4.7).order_by(Restaurant.rating.desc()).limit(6).all()
+    top_rated = [
+        _to_restaurant_out_from_db(
+            r,
+            match_score=96,
+            reason=f"Top-rated {r.cuisine} destination ({r.rating}⭐) in {r.area}.",
+            is_fav=r.id in user_fav_ids
+        )
+        for r in top_db
+    ]
 
-@router.get("/similar/{product_id}", response_model=List[ProductResponse])
-def get_similar_recommendations(
-    product_id: int,
-    limit: int = 6,
-    db: Session = Depends(get_db)
-):
-    """
-    Get similar products and explanation for product details page.
-    """
-    recs = hybrid_engine.get_recommendations(
-        db=db,
-        target_product_id=product_id,
-        limit=limit
-    )
+    # 4. Budget Friendly (Under ₹500 for two)
+    budget_db = db.query(Restaurant).filter(Restaurant.price_for_two <= 550.0).order_by(Restaurant.rating.desc()).limit(6).all()
+    budget_friendly = [
+        _to_restaurant_out_from_db(
+            r,
+            match_score=88,
+            reason=f"Great value feast under ₹{int(r.price_for_two)} for two.",
+            is_fav=r.id in user_fav_ids
+        )
+        for r in budget_db
+    ]
 
-    results = []
-    for prod, match_pct, reason in recs:
-        p_res = ProductResponse.from_orm(prod)
-        p_res.match_score = match_pct
-        p_res.recommendation_reason = reason
-        results.append(p_res)
-
-    return results
-
-@router.get("/smart-cart", response_model=List[ProductResponse])
-def get_smart_cart_recommendations(
-    product_ids: str = Query(..., description="Comma-separated product IDs in cart"),
-    limit: int = 4,
-    db: Session = Depends(get_db)
-):
-    """
-    Smart Cart complementary cross-sell recommendations based on items in cart.
-    """
-    try:
-        cart_pids = [int(i.strip()) for i in product_ids.split(",") if i.strip()]
-    except ValueError:
-        return []
-
-    if not cart_pids:
-        return []
-
-    all_products = db.query(Product).all()
-    prod_map = {p.id: p for p in all_products}
-    
-    # 1. Check collaborative co-occurrence first
-    suggested_pids = []
-    for pid in cart_pids:
-        fbt = collaborative_engine.get_frequently_bought_together(pid, top_n=2)
-        for fbt_pid, score in fbt:
-            if fbt_pid not in cart_pids and fbt_pid not in suggested_pids:
-                suggested_pids.append(fbt_pid)
-
-    # 2. Add complementary category items
-    complementary_cat_map = {
-        "Ethnic & Fashion": ["Watches & Accessories", "Footwear"],
-        "Footwear": ["Watches & Accessories", "Electronics & Audio"],
-        "Electronics & Audio": ["Watches & Accessories"],
-        "Indian Delicacies & Sweets": ["Groceries & Spices"],
-        "Groceries & Spices": ["Home & Kitchen"],
-        "Beauty & Ayurveda": ["Watches & Accessories"],
-        "Home & Kitchen": ["Groceries & Spices"],
-        "Watches & Accessories": ["Ethnic & Fashion"]
-    }
-
-    cart_cats = [prod_map[pid].category for pid in cart_pids if pid in prod_map]
-    target_cats = set()
-    for c in cart_cats:
-        for comp_c in complementary_cat_map.get(c, []):
-            target_cats.add(comp_c)
-
-    for p in all_products:
-        if p.id not in cart_pids and p.id not in suggested_pids and p.category in target_cats:
-            suggested_pids.append(p.id)
-            if len(suggested_pids) >= limit:
-                break
-
-    results = []
-    for pid in suggested_pids[:limit]:
-        if pid in prod_map:
-            prod = prod_map[pid]
-            p_res = ProductResponse.from_orm(prod)
-            p_res.match_score = 92
-            p_res.recommendation_reason = f"Frequently paired with items in your cart"
-            results.append(p_res)
-
-    return results
-
-@router.get("/feed")
-def get_personalized_homepage_feed(
-    user_id: Optional[int] = None,
-    session_id: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Returns full personalized homepage multi-section data.
-    """
-    all_products = db.query(Product).all()
-    if not all_products:
-        return {}
-
-    # 1. Trending Now (High rating & review volume)
-    trending = sorted(all_products, key=lambda p: (p.rating * p.review_count), reverse=True)[:6]
-    trending_res = [ProductResponse.from_orm(p) for p in trending]
-    for p in trending_res:
-        p.recommendation_reason = f"Trending across India ({p.review_count}+ orders)"
-        p.match_score = 94
-
-    # 2. Picked For You (Hybrid AI)
-    picked_raw = hybrid_engine.get_recommendations(db=db, user_id=user_id, session_id=session_id, limit=6)
-    picked_res = []
-    for prod, match_pct, reason in picked_raw:
-        p_res = ProductResponse.from_orm(prod)
-        p_res.match_score = match_pct
-        p_res.recommendation_reason = reason
-        picked_res.append(p_res)
-
-    # 3. Budget Deals (High discount > 35%)
-    budget_items = sorted([p for p in all_products if p.discount >= 30], key=lambda p: p.discount, reverse=True)[:6]
-    budget_res = [ProductResponse.from_orm(p) for p in budget_items]
-    for p in budget_res:
-        p.recommendation_reason = f"Festive Deal: {p.discount}% OFF"
-        p.match_score = 88
-
-    # 4. Festive Highlights (Indian Celebrations & Traditional Delights)
-    festive_categories = ["Ethnic & Fashion", "Indian Delicacies & Sweets", "Home & Kitchen"]
-    festive_items = [p for p in all_products if p.category in festive_categories][:6]
-    festive_res = [ProductResponse.from_orm(p) for p in festive_items]
-    for p in festive_res:
-        p.recommendation_reason = "Curated for Festive Celebrations & Gifting"
-        p.match_score = 91
-
-    # 5. Recently Viewed / Session history based
-    user_interactions = []
+    # 5. Near Preferred Location (Banjara Hills / Jubilee Hills / Gachibowli)
+    pref_area = "Banjara Hills"
     if user_id:
-        user_interactions = db.query(Interaction).filter(Interaction.user_id == user_id).order_by(desc(Interaction.timestamp)).limit(5).all()
-    elif session_id:
-        user_interactions = db.query(Interaction).filter(Interaction.session_id == session_id).order_by(desc(Interaction.timestamp)).limit(5).all()
+        u = db.query(User).filter(User.id == user_id).first()
+        if u and u.preferred_areas:
+            pref_areas_list = json.loads(u.preferred_areas or "[]")
+            if pref_areas_list:
+                pref_area = pref_areas_list[0]
 
-    recently_viewed_res = []
-    seen_pids = set()
-    prod_dict = {p.id: p for p in all_products}
-    for inter in user_interactions:
-        if inter.product_id in prod_dict and inter.product_id not in seen_pids:
-            p_obj = prod_dict[inter.product_id]
-            p_res = ProductResponse.from_orm(p_obj)
-            p_res.recommendation_reason = "From your recent browsing history"
-            recently_viewed_res.append(p_res)
-            seen_pids.add(inter.product_id)
+    near_db = db.query(Restaurant).filter(Restaurant.area.ilike(f"%{pref_area}%")).limit(6).all()
+    if not near_db:
+        near_db = db.query(Restaurant).limit(6).all()
+    
+    near_location = [
+        _to_restaurant_out_from_db(
+            r,
+            match_score=90,
+            reason=f"Conveniently located in your preferred dining zone ({r.area}).",
+            is_fav=r.id in user_fav_ids
+        )
+        for r in near_db
+    ]
 
-    return {
-        "trending_now": trending_res,
-        "picked_for_you": picked_res,
-        "matches_budget": budget_res,
-        "festive_specials": festive_res,
-        "recently_viewed": recently_viewed_res
-    }
+    # 6. Explore Something New (Diverse discovery)
+    explore_db = db.query(Restaurant).order_by(Restaurant.id.desc()).limit(6).all()
+    explore_new = [
+        _to_restaurant_out_from_db(
+            r,
+            match_score=84,
+            reason=f"Discover unique {r.cuisine} flavors in {r.area}.",
+            is_fav=r.id in user_fav_ids
+        )
+        for r in explore_db
+    ]
+
+    # 7. Categories
+    cats = db.query(CuisineCategory).all()
+    cuisines_out = [CuisineOut.from_orm(c) for c in cats]
+
+    return HomepageFeed(
+        picked_for_you=picked_for_you,
+        trending_hyderabad=trending_hyderabad,
+        top_rated=top_rated,
+        budget_friendly=budget_friendly,
+        near_location=near_location,
+        explore_new=explore_new,
+        cuisines=cuisines_out
+    )
+
+@router.post("/feedback")
+def submit_recommendation_feedback(
+    payload: dict,
+    db: Session = Depends(get_db)
+):
+    r_id = payload.get("restaurant_id")
+    fb_type = payload.get("feedback_type", "like")
+    user_id = payload.get("user_id")
+    session_id = payload.get("session_id")
+    source = payload.get("recommendation_source", "hybrid")
+
+    if not r_id:
+        return {"error": "restaurant_id required"}
+
+    feedback = RecommendationFeedback(
+        restaurant_id=r_id,
+        user_id=user_id,
+        session_id=session_id,
+        feedback_type=fb_type,
+        recommendation_source=source
+    )
+    db.add(feedback)
+    db.commit()
+
+    return {"message": "Feedback recorded", "status": "success"}
+
+def _get_user_favs(user_id: Optional[int], db: Session):
+    if not user_id:
+        return set()
+    favs = db.query(Favorite).filter(Favorite.user_id == user_id).all()
+    return {f.restaurant_id for f in favs}
+
+def _to_restaurant_out(item: dict) -> RestaurantOut:
+    r = item["restaurant"]
+    return RestaurantOut(
+        id=r.id,
+        name=r.name,
+        description=r.description,
+        cuisine=r.cuisine,
+        cuisines_list=json.loads(r.cuisines_list or "[]"),
+        location=r.location,
+        area=r.area,
+        city=r.city,
+        rating=r.rating,
+        review_count=r.review_count,
+        price_for_two=r.price_for_two,
+        cost_category=r.cost_category,
+        veg_type=r.veg_type,
+        specialty_dishes=json.loads(r.specialty_dishes or "[]"),
+        opening_status=r.opening_status,
+        image=r.image,
+        food_gallery=json.loads(r.food_gallery or "[]"),
+        tags=json.loads(r.tags or "[]"),
+        match_score=item["match_score"],
+        recommendation_reason=item["reason"],
+        is_favorite=item.get("is_favorite", False)
+    )
+
+def _to_restaurant_out_from_db(r: Restaurant, match_score: int, reason: str, is_fav: bool) -> RestaurantOut:
+    return RestaurantOut(
+        id=r.id,
+        name=r.name,
+        description=r.description,
+        cuisine=r.cuisine,
+        cuisines_list=json.loads(r.cuisines_list or "[]"),
+        location=r.location,
+        area=r.area,
+        city=r.city,
+        rating=r.rating,
+        review_count=r.review_count,
+        price_for_two=r.price_for_two,
+        cost_category=r.cost_category,
+        veg_type=r.veg_type,
+        specialty_dishes=json.loads(r.specialty_dishes or "[]"),
+        opening_status=r.opening_status,
+        image=r.image,
+        food_gallery=json.loads(r.food_gallery or "[]"),
+        tags=json.loads(r.tags or "[]"),
+        match_score=match_score,
+        recommendation_reason=reason,
+        is_favorite=is_fav
+    )

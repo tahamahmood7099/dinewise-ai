@@ -1,230 +1,140 @@
 import json
-from typing import List, Dict, Optional, Tuple
+import numpy as np
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
-from ..models import Product, Interaction, RecommendationFeedback, User
+from ..models import Restaurant, User, Favorite, RecommendationFeedback
 from ..config import settings
-from .content_engine import content_engine
-from .collaborative_engine import collaborative_engine
+from .content_engine import restaurant_content_engine
+from .collaborative_engine import restaurant_collab_engine
 
-class HybridRecommendationEngine:
-    def __init__(self):
-        self.alpha = settings.ALPHA_CONTENT_WEIGHT
-        self.beta = settings.BETA_COLLAB_WEIGHT
+class RestaurantHybridEngine:
+    def __init__(self, alpha: float = None, beta: float = None):
+        self.alpha = alpha if alpha is not None else settings.ALPHA_CONTENT_WEIGHT
+        self.beta = beta if beta is not None else settings.BETA_COLLAB_WEIGHT
 
-    def get_recommendations(
+    def get_hybrid_recommendations(
         self,
         db: Session,
-        user_id: Optional[int] = None,
-        session_id: Optional[str] = None,
-        target_product_id: Optional[int] = None,
-        category: Optional[str] = None,
-        limit: int = 8,
-        diversity_penalty: float = 0.15
-    ) -> List[Tuple[Product, int, str]]:
-        """
-        Generate hybrid recommendations.
-        Returns list of (Product, match_percentage, explainable_reason).
-        """
-        all_products = db.query(Product).all()
-        if not all_products:
+        user_id: int = None,
+        session_id: str = None,
+        limit: int = 10,
+        cuisine: str = None,
+        area: str = None,
+        max_price: float = None,
+        veg_only: bool = False
+    ):
+        restaurants = db.query(Restaurant).all()
+        if not restaurants:
             return []
 
-        # Train / update models if needed
-        all_interactions = db.query(Interaction).all()
-        content_engine.fit(all_products)
-        collaborative_engine.fit(all_interactions, all_products)
+        user = db.query(User).filter(User.id == user_id).first() if user_id else None
+        
+        # 1. Fetch Content & Collab Scores
+        if user_id:
+            content_scores = restaurant_content_engine.get_user_content_scores(user_id, db)
+            collab_scores = restaurant_collab_engine.get_user_collaborative_scores(user_id, db)
+        else:
+            # Cold-start fallback
+            content_scores = {r.id: 0.5 for r in restaurants}
+            collab_scores = {r.id: float(r.rating / 5.0) for r in restaurants}
 
-        user_ident = str(user_id) if user_id is not None else session_id
-
-        # 1. Fetch user's interactions & feedback
-        user_interactions = []
-        if user_id is not None:
-            user_interactions = db.query(Interaction).filter(Interaction.user_id == user_id).all()
-        elif session_id:
-            user_interactions = db.query(Interaction).filter(Interaction.session_id == session_id).all()
-
-        # Fetch disliked product IDs
-        disliked_product_ids = set()
-        feedbacks = []
-        if user_id is not None:
-            feedbacks = db.query(RecommendationFeedback).filter(
+        # 2. Fetch User Negative Feedback to down-weight
+        disliked_ids = set()
+        if user_id:
+            dislikes = db.query(RecommendationFeedback).filter(
                 RecommendationFeedback.user_id == user_id,
                 RecommendationFeedback.feedback_type == "dislike"
             ).all()
-        elif session_id:
-            feedbacks = db.query(RecommendationFeedback).filter(
-                RecommendationFeedback.session_id == session_id,
-                RecommendationFeedback.feedback_type == "dislike"
-            ).all()
-        
-        for fb in feedbacks:
-            disliked_product_ids.add(fb.product_id)
+            disliked_ids = {d.restaurant_id for d in dislikes}
 
-        # 2. Case A: Product-specific recommendations (e.g. on Product Detail Page)
-        if target_product_id:
-            return self._get_product_detail_recommendations(
-                db, target_product_id, all_products, disliked_product_ids, limit
-            )
+        user_favorites = set()
+        if user_id:
+            favs = db.query(Favorite).filter(Favorite.user_id == user_id).all()
+            user_favorites = {f.restaurant_id for f in favs}
 
-        # 3. Case B: Cold start handling for brand new user / guest with no history
-        if not user_interactions and not target_product_id:
-            return self._get_cold_start_recommendations(
-                db, user_id, all_products, category, disliked_product_ids, limit
-            )
-
-        # 4. Hybrid computation for users with history
-        content_scores = content_engine.get_user_content_scores(user_interactions, all_products)
-        collab_scores = collaborative_engine.predict_user_scores(user_ident) if user_ident else {}
-
-        # Already purchased/carted items to avoid excessive repetition
-        interacted_product_ids = set(i.product_id for i in user_interactions if i.interaction_type in ["purchase", "cart"])
-
-        combined_scores = []
-        category_counts: Dict[str, int] = {}
-
-        for prod in all_products:
-            if prod.id in disliked_product_ids:
+        # 3. Combine scores with formula: Hybrid = alpha * Content + beta * Collab
+        scored_restaurants = []
+        for r in restaurants:
+            # Apply hard filters if requested
+            if cuisine and cuisine.lower() not in r.cuisine.lower() and cuisine.lower() not in (r.cuisines_list or "").lower():
+                continue
+            if area and area.lower() not in r.area.lower():
+                continue
+            if max_price and r.price_for_two > max_price:
+                continue
+            if veg_only and r.veg_type != "veg":
                 continue
 
-            c_score, c_reason = content_scores.get(prod.id, (0.0, ""))
-            cl_score, cl_reason = collab_scores.get(prod.id, (0.0, ""))
+            c_score = content_scores.get(r.id, 0.5)
+            cf_score = collab_scores.get(r.id, 0.5)
+            
+            raw_hybrid = (self.alpha * c_score) + (self.beta * cf_score)
+            
+            # Penalize disliked restaurants
+            if r.id in disliked_ids:
+                raw_hybrid *= 0.3
 
-            # Hybrid weighted combination
-            if c_score > 0 and cl_score > 0:
-                hybrid_score = (self.alpha * c_score) + (self.beta * cl_score)
-                reason = f"Personalized for you: {c_reason} & popular among similar shoppers"
-            elif c_score > 0:
-                hybrid_score = c_score
-                reason = c_reason or "Curated based on your recent activity"
-            elif cl_score > 0:
-                hybrid_score = cl_score
-                reason = cl_reason
-            else:
-                # Slight baseline popularity factor
-                hybrid_score = (prod.rating / 5.0) * 0.2
-                reason = f"Top rated with {prod.rating}★ rating"
+            # Scale to % match (60% to 98% range for realistic human display)
+            match_pct = int(np.clip(raw_hybrid * 100, 60, 98))
 
-            # Filter category if explicitly requested
-            if category and prod.category != category:
-                continue
+            reason = self._generate_explanation(r, user, c_score, cf_score, r.id in user_favorites)
 
-            # Diversity adjustment: apply penalty if category is over-represented
-            cat_count = category_counts.get(prod.category, 0)
-            penalized_score = hybrid_score * (1.0 - (cat_count * diversity_penalty))
+            scored_restaurants.append({
+                "restaurant": r,
+                "score": raw_hybrid,
+                "match_score": match_pct,
+                "reason": reason,
+                "is_favorite": r.id in user_favorites
+            })
 
-            # Calculate intuitive match percentage (e.g. 70% to 98%)
-            match_pct = int(min(98, max(65, penalized_score * 100)))
+        # 4. Sort by Hybrid score descending
+        scored_restaurants.sort(key=lambda x: x["score"], reverse=True)
 
-            combined_scores.append((prod, penalized_score, match_pct, reason))
+        # 5. Apply Diversity Penalty (limit consecutive restaurants of the exact same cuisine)
+        diverse_results = []
+        cuisine_count = {}
+        for item in scored_restaurants:
+            r_cuis = item["restaurant"].cuisine
+            if cuisine_count.get(r_cuis, 0) < 2 or len(diverse_results) >= limit:
+                diverse_results.append(item)
+                cuisine_count[r_cuis] = cuisine_count.get(r_cuis, 0) + 1
 
-        # Sort descending by penalized score
-        combined_scores.sort(key=lambda x: x[1], reverse=True)
-
-        results = []
-        for prod, score, match_pct, reason in combined_scores:
-            results.append((prod, match_pct, reason))
-            category_counts[prod.category] = category_counts.get(prod.category, 0) + 1
-            if len(results) >= limit:
-                break
-
-        return results
-
-    def _get_product_detail_recommendations(
-        self,
-        db: Session,
-        target_product_id: int,
-        all_products: List[Product],
-        disliked_product_ids: set,
-        limit: int
-    ) -> List[Tuple[Product, int, str]]:
-        """Recommendations when viewing a single product."""
-        # 1. Content similarity
-        sim_items = content_engine.get_similar_products(target_product_id, top_n=limit * 2)
-        # 2. Frequently bought together
-        fbt_items = collaborative_engine.get_frequently_bought_together(target_product_id, top_n=3)
-
-        fbt_ids = {pid for pid, score in fbt_items}
-        product_map = {p.id: p for p in all_products}
-
-        results = []
-        seen_ids = {target_product_id} | disliked_product_ids
-
-        # First add frequently bought together if any
-        for pid, score in fbt_items:
-            if pid in product_map and pid not in seen_ids:
-                prod = product_map[pid]
-                match_pct = int(min(99, 85 + score * 14))
-                results.append((prod, match_pct, "Frequently bought together with this item"))
-                seen_ids.add(pid)
-
-        # Then add content-similar items
-        for pid, sim_score, reason in sim_items:
-            if pid in product_map and pid not in seen_ids:
-                prod = product_map[pid]
-                match_pct = int(min(98, max(70, sim_score * 100)))
-                results.append((prod, match_pct, reason))
-                seen_ids.add(pid)
-                if len(results) >= limit:
+        # Fallback if diversity filtered too many
+        if len(diverse_results) < limit:
+            for item in scored_restaurants:
+                if item not in diverse_results:
+                    diverse_results.append(item)
+                if len(diverse_results) >= limit:
                     break
 
-        return results
+        return diverse_results[:limit]
 
-    def _get_cold_start_recommendations(
-        self,
-        db: Session,
-        user_id: Optional[int],
-        all_products: List[Product],
-        category: Optional[str],
-        disliked_product_ids: set,
-        limit: int
-    ) -> List[Tuple[Product, int, str]]:
-        """Cold-start fallback for new users: Trending + Highest Rated + Selected Category preferences."""
-        preferred_categories = []
-        if user_id is not None:
-            user = db.query(User).filter(User.id == user_id).first()
-            if user and user.preferences:
-                try:
-                    prefs = json.loads(user.preferences)
-                    preferred_categories = prefs.get("categories", [])
-                except Exception:
-                    pass
+    def _generate_explanation(self, restaurant: Restaurant, user: User, c_score: float, cf_score: float, is_fav: bool) -> str:
+        if is_fav:
+            return f"One of your saved favorite destinations in {restaurant.area}."
 
-        # Sort products by a combination of rating, review_count, and discount
-        def cold_start_score(p: Product):
-            cat_bonus = 0.3 if p.category in preferred_categories else 0.0
-            return (p.rating * 0.5) + (min(p.review_count, 2000) / 2000.0 * 0.3) + (p.discount / 100.0 * 0.2) + cat_bonus
-
-        sorted_prods = sorted(all_products, key=cold_start_score, reverse=True)
-
-        results = []
-        category_counts = {}
-        for prod in sorted_prods:
-            if prod.id in disliked_product_ids:
-                continue
-            if category and prod.category != category:
-                continue
-
-            cat_count = category_counts.get(prod.category, 0)
-            if cat_count >= 2 and len(sorted_prods) > limit:
-                continue # Ensure diversity
-
-            match_pct = int(min(95, max(75, (prod.rating / 5.0) * 100)))
+        if user:
+            user_cuisines = json.loads(user.preferred_cuisines or "[]")
+            user_areas = json.loads(user.preferred_areas or "[]")
             
-            if prod.category in preferred_categories:
-                reason = f"Based on your interest in {prod.category}"
-            elif prod.review_count > 800:
-                reason = f"Trending Bestseller with {prod.review_count}+ verified reviews"
-            elif prod.discount >= 35:
-                reason = f"Top Festive Value ({prod.discount}% OFF)"
-            else:
-                reason = f"Highly rated across India ({prod.rating}★)"
+            if restaurant.cuisine in user_cuisines:
+                return f"Matches your preferred craving for authentic {restaurant.cuisine} cuisine."
+            if restaurant.area in user_areas:
+                return f"Top-rated {restaurant.cuisine} dining spot in your preferred location ({restaurant.area})."
+            if user.dietary_pref == "Pure Veg" and restaurant.veg_type == "veg":
+                return f"Pure vegetarian haven matching your dietary preference."
+            if cf_score > 0.7:
+                return f"Highly loved by Hyderabad foodies with dining tastes similar to yours."
+            if restaurant.price_for_two <= 500:
+                return f"Pocket-friendly {restaurant.cuisine} feast under ₹500 for two."
+            if restaurant.rating >= 4.8:
+                return f"Celebrated culinary landmark with an outstanding {restaurant.rating}⭐ foodie rating."
 
-            results.append((prod, match_pct, reason))
-            category_counts[prod.category] = cat_count + 1
-            if len(results) >= limit:
-                break
+        # General data-grounded cold-start reasons
+        if restaurant.rating >= 4.8:
+            return f"Legendary Hyderabad dining spot rated {restaurant.rating}⭐ with {restaurant.review_count}+ verified reviews."
+        if restaurant.cost_category == "Budget Friendly":
+            return f"Great value dining option in {restaurant.area} with authentic flavors."
+        
+        return f"Curated for you: Popular {restaurant.cuisine} restaurant in {restaurant.area}."
 
-        return results
-
-hybrid_engine = HybridRecommendationEngine()
+restaurant_hybrid_engine = RestaurantHybridEngine()

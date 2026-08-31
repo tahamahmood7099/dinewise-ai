@@ -4,10 +4,11 @@ import React, { useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 
 interface VoiceSearchButtonProps {
-  onSearch: (transcript: string) => void;
+  onSearch?: (transcript: string) => void;
+  onTranscript?: (transcript: string) => void;
 }
 
-export default function VoiceSearchButton({ onSearch }: VoiceSearchButtonProps) {
+export default function VoiceSearchButton({ onSearch, onTranscript }: VoiceSearchButtonProps) {
   const [isListening, setIsListening] = useState(false);
 
   const startListening = (e: React.MouseEvent) => {
@@ -18,13 +19,13 @@ export default function VoiceSearchButton({ onSearch }: VoiceSearchButtonProps) 
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert("Voice search is not supported in this browser. Please type your query.");
+      alert("Voice search is not supported in this browser. Please type your food craving.");
       return;
     }
 
     try {
       const recognition = new SpeechRecognition();
-      recognition.lang = "en-IN"; // Indian English / Hinglish recognition
+      recognition.lang = "en-IN"; // Indian English / Hinglish speech recognition
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
@@ -36,7 +37,8 @@ export default function VoiceSearchButton({ onSearch }: VoiceSearchButtonProps) 
         const transcript = event.results[0][0].transcript;
         setIsListening(false);
         if (transcript) {
-          onSearch(transcript);
+          if (onTranscript) onTranscript(transcript);
+          if (onSearch) onSearch(transcript);
         }
       };
 
@@ -63,9 +65,9 @@ export default function VoiceSearchButton({ onSearch }: VoiceSearchButtonProps) 
           ? "bg-rose-500 text-white animate-pulse"
           : "text-slate-400 hover:text-orange-500 hover:bg-slate-200 dark:hover:bg-slate-700"
       }`}
-      title={isListening ? "Listening... Speak now (English/Hindi)" : "Search by voice (Web Speech API)"}
+      title={isListening ? "Listening... Speak now (e.g. 'biryani under 300')" : "Search food by voice (Web Speech API)"}
     >
-      {isListening ? <Mic className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
     </button>
   );
 }

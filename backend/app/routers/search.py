@@ -1,170 +1,108 @@
 import json
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc, asc
 from ..database import get_db
-from ..models import Product, SearchLog, Interaction
-from ..schemas import SearchResultResponse, ProductResponse, ParsedNLPIntent
-from ..ml.nlp_parser import parse_nlp_search_query, TYPO_CORRECTIONS
-from ..ml.content_engine import content_engine
+from ..models import Restaurant, SearchLog, Favorite
+from ..schemas import SearchResponse, RestaurantOut
+from ..ml.nlp_parser import restaurant_nlp_parser
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
-@router.get("", response_model=SearchResultResponse)
-def search_products(
-    q: str = Query(..., min_length=1),
-    user_id: Optional[int] = None,
-    session_id: Optional[str] = None,
-    category: Optional[str] = None,
-    brand: Optional[str] = None,
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
-    sort_by: Optional[str] = "relevance",
+@router.get("", response_model=SearchResponse)
+def search_restaurants(
+    q: str = Query(..., description="Search query string"),
+    user_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    # 1. Parse NLP and correct typos
-    parsed_intent, corrected_query = parse_nlp_search_query(q)
-    has_typo_correction = (corrected_query.lower() != q.lower())
+    nlp_res = restaurant_nlp_parser.parse_query(q)
+    
+    query = db.query(Restaurant)
 
-    # Build DB Query
-    query_builder = db.query(Product)
+    # 1. Apply NLP Filter Constraints if detected
+    if nlp_res["cuisine"]:
+        query = query.filter(
+            (Restaurant.cuisine.ilike(f"%{nlp_res['cuisine']}%")) |
+            (Restaurant.cuisines_list.ilike(f"%{nlp_res['cuisine']}%")) |
+            (Restaurant.description.ilike(f"%{nlp_res['cuisine']}%"))
+        )
 
-    # Apply category: explicit parameter overrides detected intent
-    effective_category = category if (category and category != "All") else parsed_intent.detected_category
-    if effective_category:
-        query_builder = query_builder.filter(Product.category == effective_category)
+    if nlp_res["area"]:
+        query = query.filter(Restaurant.area.ilike(f"%{nlp_res['area']}%"))
 
-    # Apply brand
-    effective_brand = brand or parsed_intent.detected_brand
-    if effective_brand:
-        query_builder = query_builder.filter(Product.brand.ilike(f"%{effective_brand}%"))
+    if nlp_res["max_price"]:
+        query = query.filter(Restaurant.price_for_two <= nlp_res["max_price"])
 
-    # Apply prices
-    effective_min_price = min_price if min_price is not None else parsed_intent.min_price
-    effective_max_price = max_price if max_price is not None else parsed_intent.max_price
-    if effective_min_price is not None:
-        query_builder = query_builder.filter(Product.price >= effective_min_price)
-    if effective_max_price is not None:
-        query_builder = query_builder.filter(Product.price <= effective_max_price)
+    if nlp_res["is_veg"]:
+        query = query.filter(Restaurant.veg_type == "veg")
 
-    # Apply keyword filtering if detected keywords exist
-    if parsed_intent.detected_keywords:
-        keyword_filters = []
-        for kw in parsed_intent.detected_keywords:
-            keyword_filters.append(Product.name.ilike(f"%{kw}%"))
-            keyword_filters.append(Product.description.ilike(f"%{kw}%"))
-            keyword_filters.append(Product.tags.ilike(f"%{kw}%"))
-            keyword_filters.append(Product.category.ilike(f"%{kw}%"))
-            keyword_filters.append(Product.brand.ilike(f"%{kw}%"))
-        query_builder = query_builder.filter(or_(*keyword_filters))
+    # 2. General Text Match fallback if NLP was broad
+    if not nlp_res["cuisine"] and not nlp_res["area"]:
+        corrected = nlp_res["corrected_query"]
+        terms = corrected.split()
+        for term in terms:
+            if len(term) >= 3:
+                query = query.filter(
+                    (Restaurant.name.ilike(f"%{term}%")) |
+                    (Restaurant.cuisine.ilike(f"%{term}%")) |
+                    (Restaurant.area.ilike(f"%{term}%")) |
+                    (Restaurant.specialty_dishes.ilike(f"%{term}%")) |
+                    (Restaurant.tags.ilike(f"%{term}%"))
+                )
 
-    # Sorting
-    if sort_by == "price_asc":
-        query_builder = query_builder.order_by(asc(Product.price))
-    elif sort_by == "price_desc":
-        query_builder = query_builder.order_by(desc(Product.price))
-    elif sort_by == "rating":
-        query_builder = query_builder.order_by(desc(Product.rating))
-    elif sort_by == "newest":
-        query_builder = query_builder.order_by(desc(Product.created_at))
+    if nlp_res["is_top_rated"]:
+        query = query.order_by(Restaurant.rating.desc(), Restaurant.review_count.desc())
     else:
-        query_builder = query_builder.order_by(desc(Product.rating))
+        query = query.order_by(Restaurant.rating.desc())
 
-    matched_products = query_builder.all()
+    matched_restaurants = query.limit(20).all()
 
-    # 2. If no exact match found, fall back to TF-IDF semantic database match or popular products
-    fallback_used = False
-    if not matched_products:
-        # Grounded semantic fallback
-        all_prods = db.query(Product).all()
-        content_engine.fit(all_prods)
-        
-        # Search by closest category if detected
-        if parsed_intent.detected_category:
-            matched_products = db.query(Product).filter(Product.category == parsed_intent.detected_category).limit(8).all()
-        else:
-            # Return top rated products
-            matched_products = db.query(Product).order_by(desc(Product.rating * Product.review_count)).limit(8).all()
-        
-        fallback_used = True
-
-    # 3. Log search query to database
-    search_log = SearchLog(
+    # Log the search
+    log_entry = SearchLog(
         user_id=user_id,
         session_id=session_id,
         query=q,
-        parsed_intent=json.dumps(parsed_intent.dict()),
-        result_count=len(matched_products) if not fallback_used else 0
+        parsed_intent=json.dumps(nlp_res),
+        result_count=len(matched_restaurants)
     )
-    db.add(search_log)
-
-    # Also log search interaction for behavior personalization
-    if matched_products:
-        first_p = matched_products[0]
-        interaction = Interaction(
-            user_id=user_id,
-            session_id=session_id,
-            product_id=first_p.id,
-            interaction_type="search",
-            weight=3.0,
-            metadata_info=json.dumps({"query": q})
-        )
-        db.add(interaction)
+    db.add(log_entry)
     db.commit()
 
-    # 4. Generate dynamic suggested categories & brands
-    suggested_cats = list(set([p.category for p in matched_products]))[:4]
-    suggested_brands = list(set([p.brand for p in matched_products]))[:4]
+    user_fav_ids = set()
+    if user_id:
+        favs = db.query(Favorite).filter(Favorite.user_id == user_id).all()
+        user_fav_ids = {f.restaurant_id for f in favs}
 
-    product_responses = []
-    for p in matched_products:
-        p_res = ProductResponse.from_orm(p)
-        if fallback_used:
-            p_res.recommendation_reason = "Alternative recommendation based on popular interest"
-        elif parsed_intent.max_price and p.price <= parsed_intent.max_price:
-            p_res.recommendation_reason = f"Fits your budget under ₹{int(parsed_intent.max_price):,}"
-        else:
-            p_res.recommendation_reason = f"Direct match for '{q}'"
-        product_responses.append(p_res)
+    restaurant_outs = []
+    for r in matched_restaurants:
+        restaurant_outs.append(RestaurantOut(
+            id=r.id,
+            name=r.name,
+            description=r.description,
+            cuisine=r.cuisine,
+            cuisines_list=json.loads(r.cuisines_list or "[]"),
+            location=r.location,
+            area=r.area,
+            city=r.city,
+            rating=r.rating,
+            review_count=r.review_count,
+            price_for_two=r.price_for_two,
+            cost_category=r.cost_category,
+            veg_type=r.veg_type,
+            specialty_dishes=json.loads(r.specialty_dishes or "[]"),
+            opening_status=r.opening_status,
+            image=r.image,
+            food_gallery=json.loads(r.food_gallery or "[]"),
+            tags=json.loads(r.tags or "[]"),
+            match_score=94,
+            recommendation_reason=f"Matches your search criteria for {r.cuisine} in {r.area}.",
+            is_favorite=r.id in user_fav_ids
+        ))
 
-    return SearchResultResponse(
+    return SearchResponse(
         query=q,
-        corrected_query=corrected_query if has_typo_correction else None,
-        parsed_intent=parsed_intent,
-        total_results=len(matched_products) if not fallback_used else 0,
-        products=product_responses,
-        suggested_categories=suggested_cats,
-        suggested_brands=suggested_brands
+        nlp_intent=nlp_res,
+        restaurants=restaurant_outs,
+        total_count=len(restaurant_outs)
     )
-
-@router.get("/suggestions", response_model=List[str])
-def get_search_suggestions(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
-    """Instant search suggestions autocomplete."""
-    q_clean = q.lower().strip()
-    products = db.query(Product).filter(
-        or_(
-            Product.name.ilike(f"%{q_clean}%"),
-            Product.category.ilike(f"%{q_clean}%"),
-            Product.brand.ilike(f"%{q_clean}%"),
-            Product.tags.ilike(f"%{q_clean}%")
-        )
-    ).limit(6).all()
-
-    suggestions = set()
-    for p in products:
-        if q_clean in p.name.lower():
-            suggestions.add(p.name)
-        if q_clean in p.brand.lower():
-            suggestions.add(f"{p.brand} Products")
-        if q_clean in p.category.lower():
-            suggestions.add(p.category)
-
-    # Add quick popular suggestions if query matches common items
-    if not suggestions:
-        popular_defaults = ["Kurta", "Biryani", "Wireless Earbuds", "Smartwatch", "Banarasi Saree", "Running Shoes", "Desi Ghee"]
-        for pdef in popular_defaults:
-            if q_clean in pdef.lower():
-                suggestions.add(pdef)
-
-    return list(suggestions)[:6]

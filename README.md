@@ -1,50 +1,46 @@
-# BharatKart AI — Intelligent Indian E-Commerce & Customer Behavior Intelligence System
-**Final Year CSE Major Project**
+# BharatBite AI — AI-Based Food Recommendation & Customer Behavior Intelligence System
+**Final Year CSE Major Project • Osmania University / NSAKCET**
 
-BharatKart AI is a production-grade, AI-powered e-commerce recommendation and behavioral intelligence platform engineered specifically for the Indian market.
+BharatBite AI is an authentic, India-first, Hyderabad-focused food discovery and recommendation intelligence platform powered by hybrid machine learning.
 
 ---
 
-## 🇮🇳 Key Highlights & Indian Context
-* **Indian Rupee (₹ INR) Pricing & GST:** All products, carts, discounts, and invoices are styled in Indian currency format.
-* **100% Authentic Indian Categories & Products:** 
-  * Ethnic & Handloom Wear (Manyavar Kurtas, FabIndia Banarasi Silk Sarees, Biba Suits)
-  * Electronics & Audio (boAt Airdopes ANC, Noise Smartwatches, OnePlus Buds)
-  * Footwear (Red Tape Sports Sneakers, Bata Leather Mojaris, Woodland Trekking Shoes)
-  * Regional Delicacies & Indian Sweets (Authentic Hyderabadi Biryani, Haldiram's Desi Ghee Gulab Jamun, Bikaji Kaju Katli)
-  * Groceries & Spices (Amul Cow Ghee, Everest Biryani Masala, Tata Tea Gold)
-  * Beauty & Ayurveda (Forest Essentials Kumkumadi Saffron Serum, Bombay Shaving Charcoal Kit)
-  * Home & Kitchen (Prestige Pressure Cooker, Brass Peacock Diya Urli Set)
-  * Watches & Accessories (Titan Neo Watches, Hidesign Tanned Leather Wallets)
-* **Indian Address & Pin Code Support:** Validated across 19,000+ PIN codes with Indian state selectors.
-* **Simulated Checkout:** UPI (GPay / PhonePe / Paytm), Cash on Delivery, and RuPay Card simulations.
+## 🍽️ Key Highlights & Indian Food Context
+* **Hyderabad-Centric & Pan-Indian Delicacies:**
+  * Authentic Hyderabadi Mutton & Chicken Dum Biryanis (Paradise, Shah Ghouse, Bawarchi)
+  * GI-Tagged Royal Mutton Haleem (Pista House)
+  * Fiery Andhra Chicken 65
+  * Middle-Eastern Charcoal Grilled Chicken Shawarma Rolls
+  * Pure-Veg Ghee Babai Butter Dosa & Steamed Button Idlis (Chutneys)
+  * Historic Charminar Irani Dum Chai & Osmania Biscuits (Nimrah Cafe & Bakery)
+  * Royal Qubani Ka Meetha with Fresh Cream, Double Ka Meetha & Desi Ghee Gulab Jamun (Dadu's Mithai Vatika)
+  * Murgh Makhani Butter Chicken, Paneer Butter Masala & Garlic Naans (Punjabi Grill)
+  * Artisanal Sourdough Cheese Burst Pizzas & Smash Burgers (Slice & Crust)
+* **Indian Currency (₹ INR) & Hyderabad Logistics:** Pricing, cart totals, delivery fees (₹30 / FREE over ₹400), platform fees (₹5), and Indian addresses with PIN codes.
+* **Simulated Indian Checkout:** UPI (GPay / PhonePe / Paytm / BHIM) and Cash on Delivery simulation.
 
 ---
 
 ## 🤖 AI / ML Architecture & Recommendation Engines
 
 1. **Content-Based Filtering (TF-IDF + Cosine Similarity):**
-   * Vectorizes product titles, descriptions, categories, brands, colors, and feature tags using Scikit-Learn's `TfidfVectorizer`.
-   * Computes pairwise semantic cosine similarity for catalog items and builds weighted user profile vectors from browsing interactions.
-2. **Collaborative Filtering (User-Item Interaction Matrix):**
-   * Constructs user-item interaction matrices weighted by behavior telemetry:
-     * `View` = 1.0, `Click` = 2.0, `Search` = 3.0, `Wishlist` = 5.0, `Cart` = 7.0, `Purchase` = 10.0, `Like` = +8.0, `Dislike` = -10.0
-   * Calculates User-User similarity and Item-Item co-occurrence matrices.
+   * Computes semantic cosine similarity over dish textual signals: cuisine, category, ingredients, spice level, and veg/non-veg status.
+2. **Collaborative Filtering (User-Dish Interaction Matrix):**
+   * Weights user behavior telemetry: `View` = 1.0, `Click` = 2.0, `Search` = 3.0, `Favorite` = 5.0, `Cart` = 7.0, `Order` = 10.0, `Like` = +8.0, `Dislike` = -10.0.
+   * Computes User-User taste similarity and Item-Item co-occurrence (for complementary pairings like Biryani + Mirchi Salan/Gulab Jamun).
 3. **Hybrid Recommendation Engine:**
-   * Formula: $$\text{Hybrid Score}(u, i) = \alpha \cdot \text{Content}(u, i) + \beta \cdot \text{Collab}(u, i)$$ with configurable weights ($\alpha = 0.6, \beta = 0.4$).
-   * Features diversity penalties to avoid category clustering and negative feedback suppression.
+   * Formula: $$\text{Hybrid Score}(u, d) = \alpha \cdot \text{Content}(u, d) + \beta \cdot \text{Collab}(u, d)$$ with configured weights ($\alpha = 0.6, \beta = 0.4$).
+   * Features diversity penalties to prevent category repetition and negative feedback down-weighting.
 4. **Explainable AI (XAI):**
-   * Every single recommendation attaches a data-grounded rationale (e.g., *"Curated for your interest in Footwear & popular among similar shoppers"*).
-5. **Lightweight NLP & Typo-Tolerant Search Parser:**
-   * Extracts constraints: Category, Brand, Color, Min/Max Price from natural language queries and Hinglish patterns (e.g., *"black shoes under 2000"*, *"2000 ke andar black shoes"*, *"biriyani"* $\rightarrow$ *"biryani"*).
-6. **AI Shopping Assistant:**
-   * Floating conversational assistant strictly grounded in the database catalog.
-7. **Customer Behavioral Segmentation:**
-   * Classifies shoppers into `Budget Shopper`, `Premium Buyer`, `Frequent Buyer`, and `Window Shopper` profiles.
-8. **Demand Intelligence & Zero-Result Search Analytics:**
-   * Flags *"High Interest, Low Conversion"* inventory and logs unmet consumer search demand.
-9. **Algorithmic Evaluation Module:**
-   * Evaluates and benchmarks `Popularity Baseline`, `Content-Based`, `Collaborative Filtering`, and `Hybrid Engine` using **Precision@K**, **Recall@K**, **F1-Score**, and **NDCG@K**.
+   * Every single recommendation attaches a data-grounded rationale (e.g., *"Personalized for you: Matches your frequent craving for Biryani & loved by foodies with similar taste"*).
+5. **Food NLP & Typo-Tolerant Search Parser:**
+   * Extracts constraints: Category, Cuisine, Spice preference ('Mild', 'Medium', 'Spicy', 'Extra Spicy'), Veg/Non-Veg, and Budget Caps from English and Hinglish queries (e.g., *"biryani under 300"*, *"200 ke andar biryani"*, *"spicy chicken"*, *"biriyani"* $\rightarrow$ *"biryani"*).
+6. **AI Food Concierge:**
+   * Floating shopping assistant grounded in the food database.
+7. **Food Customer Behavioral Segmentation:**
+   * Segments: `Biryani Lovers`, `Budget Foodies`, `Premium Diners`, `Dessert Lovers`, `Healthy Food Seekers`, and `Explorer / Variety Seekers`.
+8. **Recommendation Model Evaluation Benchmarks:**
+   * Evaluates `Popularity Baseline`, `Content-Based`, `Collaborative Filtering`, and `Hybrid Engine` using **Precision@K**, **Recall@K**, **F1-Score**, and **NDCG@K**.
 
 ---
 
@@ -55,7 +51,7 @@ BharatKart AI is a production-grade, AI-powered e-commerce recommendation and be
 * Node.js 18+ and npm
 
 ### 1. Launch with One Click
-Double click `start_project.bat` in the project root directory.
+Double-click `start_project.bat` in the project root directory.
 
 ### 2. Manual Startup
 **Backend (FastAPI):**
@@ -63,7 +59,7 @@ Double click `start_project.bat` in the project root directory.
 cd backend
 python run.py
 ```
-*Backend runs on `http://127.0.0.1:8000` (Swagger UI at `/docs`)*
+*Backend runs on `http://127.0.0.1:8000` (Interactive API docs at `http://127.0.0.1:8000/docs`)*
 
 **Frontend (Next.js):**
 ```bash
@@ -74,10 +70,9 @@ npm run dev
 
 ---
 
-## 👥 Demo User Personas for Evaluation & Presentation
-
-Switch personas directly from the Navbar profile dropdown:
-1. **Aarav Sharma** (`aarav.sharma@example.in` / `password123`): Tech and Footwear enthusiast.
-2. **Priya Patel** (`priya.patel@example.in` / `password123`): Ethnic Fashion and Ayurvedic Beauty shopper.
-3. **Ananya Mukherjee** (`ananya.m@example.in` / `password123`): Food and Indian Sweets buyer.
-4. **Admin Nadeem** (`admin@bharatkart.in` / `adminpassword`): Full access to Admin BI Telemetry & Model Evaluation.
+## 👥 Demo Foodie Personas for Presentation
+Switch personas instantly from the Navbar user menu:
+1. **Aarav Sharma** (`aarav.sharma@example.in` / `password123`): High affinity for Biryani & Spicy Non-Veg.
+2. **Priya Patel** (`priya.patel@example.in` / `password123`): High affinity for Pure Veg, Ghee Dosas & Sweets.
+3. **Ananya Mukherjee** (`ananya.m@example.in` / `password123`): High affinity for Mutton Haleem & Qubani Ka Meetha.
+4. **Admin Nadeem** (`admin@bharatbite.in` / `adminpassword`): Full access to Admin BI Telemetry & Model Evaluation.

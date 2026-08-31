@@ -1,136 +1,127 @@
+import json
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Optional
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import Session
-from ..models import Product, Interaction
+from ..models import Restaurant, User, Interaction, Favorite, Rating
 
-class ContentBasedEngine:
+class RestaurantContentEngine:
     def __init__(self):
-        self.vectorizer = TfidfVectorizer(stop_words='english', token_pattern=r'(?u)\b\w+\b')
+        self.vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
         self.tfidf_matrix = None
-        self.product_ids = []
-        self.product_df = None
-        self.similarity_matrix = None
+        self.restaurant_ids = []
+        self.restaurant_df = None
 
-    def fit(self, products: List[Product]):
-        """Train or update TF-IDF representation of the product catalog."""
-        if not products:
+    def build_feature_corpus(self, db: Session):
+        restaurants = db.query(Restaurant).all()
+        if not restaurants:
             return
-        
-        data = []
-        for p in products:
-            # Combine textual signals for rich semantic representation
-            text_corpus = f"{p.name} {p.category} {p.brand} {p.tags} {p.colors} {p.description}"
-            data.append({
-                "id": p.id,
-                "name": p.name,
-                "category": p.category,
-                "brand": p.brand,
-                "price": p.price,
-                "corpus": text_corpus
-            })
-        
-        self.product_df = pd.DataFrame(data)
-        self.product_ids = self.product_df["id"].tolist()
-        
-        # Compute TF-IDF matrix & pairwise cosine similarity
-        self.tfidf_matrix = self.vectorizer.fit_transform(self.product_df["corpus"])
-        self.similarity_matrix = cosine_similarity(self.tfidf_matrix, self.tfidf_matrix)
 
-    def get_similar_products(self, product_id: int, top_n: int = 6) -> List[Tuple[int, float, str]]:
-        """
-        Return list of (product_id, similarity_score, reason) for a given product.
-        """
-        if self.similarity_matrix is None or product_id not in self.product_ids:
+        records = []
+        for r in restaurants:
+            cuisines = " ".join(json.loads(r.cuisines_list or "[]"))
+            specialties = " ".join(json.loads(r.specialty_dishes or "[]"))
+            tags = " ".join(json.loads(r.tags or "[]"))
+            veg_label = "pure vegetarian veg" if r.veg_type == "veg" else ("non-vegetarian non-veg" if r.veg_type == "non_veg" else "veg non-veg both")
+            
+            # Rich semantic document representing restaurant characteristics
+            doc = f"{r.name} {r.cuisine} {cuisines} {r.area} {r.location} {r.city} {r.cost_category} {veg_label} {specialties} {tags} {r.description}"
+            records.append({
+                "id": r.id,
+                "name": r.name,
+                "cuisine": r.cuisine,
+                "area": r.area,
+                "cost_category": r.cost_category,
+                "veg_type": r.veg_type,
+                "document": doc
+            })
+
+        self.restaurant_df = pd.DataFrame(records)
+        self.restaurant_ids = self.restaurant_df["id"].tolist()
+        self.tfidf_matrix = self.vectorizer.fit_transform(self.restaurant_df["document"])
+
+    def get_similar_restaurants(self, restaurant_id: int, db: Session, top_n: int = 5):
+        if self.tfidf_matrix is None or len(self.restaurant_ids) == 0:
+            self.build_feature_corpus(db)
+        
+        if restaurant_id not in self.restaurant_ids:
             return []
+
+        idx = self.restaurant_ids.index(restaurant_id)
+        cosine_sim = cosine_similarity(self.tfidf_matrix[idx], self.tfidf_matrix).flatten()
         
-        idx = self.product_ids.index(product_id)
-        sim_scores = list(enumerate(self.similarity_matrix[idx]))
-        # Sort descending by score, skip the item itself
-        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-        sim_scores = [s for s in sim_scores if s[0] != idx][:top_n]
-        
-        target_prod = self.product_df.iloc[idx]
-        
+        # Sort indices excluding self
+        similar_indices = np.argsort(cosine_sim)[::-1]
         results = []
-        for match_idx, score in sim_scores:
-            matched_id = self.product_ids[match_idx]
-            matched_prod = self.product_df.iloc[match_idx]
-            
-            # Grounded reason generation
-            if matched_prod["brand"] == target_prod["brand"]:
-                reason = f"Also from {matched_prod['brand']} in {matched_prod['category']}"
-            elif matched_prod["category"] == target_prod["category"]:
-                reason = f"Matches category {matched_prod['category']} similar to {target_prod['name'][:25]}..."
-            else:
-                reason = f"Features similar specifications & style profile"
-                
-            results.append((matched_id, float(score), reason))
-            
+        for sim_idx in similar_indices:
+            r_id = self.restaurant_ids[sim_idx]
+            if r_id != restaurant_id:
+                score = float(cosine_sim[sim_idx])
+                results.append((r_id, score))
+                if len(results) >= top_n:
+                    break
         return results
 
-    def get_user_content_scores(self, user_interactions: List[Interaction], all_products: List[Product]) -> Dict[int, Tuple[float, str]]:
+    def get_user_content_scores(self, user_id: int, db: Session) -> dict:
         """
-        Build a user profile vector from interacted products weighted by interaction weights,
-        and calculate cosine similarity against all catalog items.
+        Builds a synthesized user profile vector based on the user's past
+        interactions, favorites, ratings, and explicit onboarding preferences.
         """
-        if self.similarity_matrix is None:
-            self.fit(all_products)
-            
-        if self.similarity_matrix is None or not user_interactions:
+        if self.tfidf_matrix is None or len(self.restaurant_ids) == 0:
+            self.build_feature_corpus(db)
+
+        if self.tfidf_matrix is None or len(self.restaurant_ids) == 0:
             return {}
 
-        # Aggregate weighted interactions per product
-        interacted_product_weights: Dict[int, float] = {}
-        for inter in user_interactions:
-            interacted_product_weights[inter.product_id] = (
-                interacted_product_weights.get(inter.product_id, 0.0) + inter.weight
-            )
+        # 1. Fetch user's interactions & favorites
+        interactions = db.query(Interaction).filter(Interaction.user_id == user_id).all()
+        favorites = db.query(Favorite).filter(Favorite.user_id == user_id).all()
+        ratings = db.query(Rating).filter(Rating.user_id == user_id).all()
+        user_obj = db.query(User).filter(User.id == user_id).first()
 
-        # Build user profile as weighted combination of item TF-IDF vectors
+        restaurant_weights = {}
+        for inter in interactions:
+            restaurant_weights[inter.restaurant_id] = restaurant_weights.get(inter.restaurant_id, 0.0) + inter.weight
+        for fav in favorites:
+            restaurant_weights[fav.restaurant_id] = restaurant_weights.get(fav.restaurant_id, 0.0) + 6.0
+        for rat in ratings:
+            restaurant_weights[rat.restaurant_id] = restaurant_weights.get(rat.restaurant_id, 0.0) + (rat.rating_score * 1.5)
+
+        # Build weighted profile vector
         user_vector = np.zeros((1, self.tfidf_matrix.shape[1]))
         total_weight = 0.0
-        
-        last_viewed_category = None
-        last_viewed_brand = None
-        
-        for pid, wt in interacted_product_weights.items():
-            if pid in self.product_ids:
-                idx = self.product_ids.index(pid)
-                item_vec = self.tfidf_matrix[idx].toarray()
-                user_vector += wt * item_vec
-                total_weight += wt
-                
-                # capture context for explainability
-                prod_row = self.product_df.iloc[idx]
-                last_viewed_category = prod_row["category"]
-                last_viewed_brand = prod_row["brand"]
 
-        if total_weight == 0:
-            return {}
+        for r_id, weight in restaurant_weights.items():
+            if r_id in self.restaurant_ids:
+                idx = self.restaurant_ids.index(r_id)
+                user_vector += self.tfidf_matrix[idx].toarray() * weight
+                total_weight += weight
+
+        # Add explicit onboarding preferences if available
+        if user_obj:
+            pref_cuisines = json.loads(user_obj.preferred_cuisines or "[]")
+            pref_areas = json.loads(user_obj.preferred_areas or "[]")
+            diet = user_obj.dietary_pref or ""
+            budget = user_obj.preferred_budget or ""
+            
+            pref_text = f"{' '.join(pref_cuisines)} {' '.join(pref_areas)} {diet} {budget}"
+            if pref_text.strip():
+                pref_vec = self.vectorizer.transform([pref_text]).toarray()
+                user_vector += pref_vec * 4.0
+                total_weight += 4.0
+
+        if total_weight == 0.0:
+            # Cold-start uniform profile
+            return {r_id: 0.5 for r_id in self.restaurant_ids}
 
         user_vector = user_vector / total_weight
-        
-        # Calculate similarity between user profile and all items
-        user_sim = cosine_similarity(user_vector, self.tfidf_matrix)[0]
-        
+        sim_scores = cosine_similarity(user_vector, self.tfidf_matrix).flatten()
+
         scores_dict = {}
-        for idx, score in enumerate(user_sim):
-            pid = self.product_ids[idx]
-            prod_row = self.product_df.iloc[idx]
-            
-            # Grounded explainability reason
-            if last_viewed_brand and prod_row["brand"] == last_viewed_brand:
-                reason = f"Matches your interest in {last_viewed_brand}"
-            elif last_viewed_category and prod_row["category"] == last_viewed_category:
-                reason = f"Curated for your interest in {last_viewed_category}"
-            else:
-                reason = "Matches your browsing & taste profile"
-                
-            scores_dict[pid] = (float(score), reason)
-            
+        for idx, r_id in enumerate(self.restaurant_ids):
+            scores_dict[r_id] = float(np.clip(sim_scores[idx], 0.0, 1.0))
+
         return scores_dict
 
-content_engine = ContentBasedEngine()
+restaurant_content_engine = RestaurantContentEngine()

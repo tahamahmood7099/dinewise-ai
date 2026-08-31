@@ -1,70 +1,203 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import Interaction, RecommendationFeedback, Product
-from ..schemas import InteractionCreate, InteractionResponse, FeedbackCreate
+from ..models import Interaction, Favorite, Restaurant, User
+from ..schemas import InteractionCreate, FavoriteCreate, RestaurantOut
 from ..config import settings
 
-router = APIRouter(prefix="/interactions", tags=["Interactions & Behavior Tracking"])
+router = APIRouter(tags=["Interactions & Favorites"])
 
-INTERACTION_WEIGHT_MAP = {
-    "view": settings.WEIGHT_VIEW,
-    "click": settings.WEIGHT_CLICK,
-    "search": settings.WEIGHT_SEARCH,
-    "wishlist": settings.WEIGHT_WISHLIST,
-    "cart": settings.WEIGHT_CART,
-    "purchase": settings.WEIGHT_PURCHASE,
-    "feedback_like": settings.WEIGHT_FEEDBACK_POSITIVE,
-    "feedback_dislike": settings.WEIGHT_FEEDBACK_NEGATIVE,
-}
-
-@router.post("", response_model=InteractionResponse)
-def log_interaction(interaction_in: InteractionCreate, db: Session = Depends(get_db)):
-    # Verify product exists
-    product = db.query(Product).filter(Product.id == interaction_in.product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    weight = INTERACTION_WEIGHT_MAP.get(interaction_in.interaction_type.lower(), 1.0)
+@router.post("/interactions")
+def log_interaction(
+    payload: InteractionCreate,
+    db: Session = Depends(get_db)
+):
+    # Determine weight by interaction type
+    w = settings.WEIGHT_VIEW
+    t = payload.interaction_type.lower()
+    if t == "click":
+        w = settings.WEIGHT_CLICK
+    elif t == "search":
+        w = settings.WEIGHT_SEARCH
+    elif t == "recommendation_click":
+        w = settings.WEIGHT_RECOMMENDATION_CLICK
+    elif t == "favorite":
+        w = settings.WEIGHT_FAVORITE
+    elif t == "rating":
+        w = settings.WEIGHT_RATING
+    elif t == "like":
+        w = settings.WEIGHT_FEEDBACK_POSITIVE
+    elif t == "dislike":
+        w = settings.WEIGHT_FEEDBACK_NEGATIVE
 
     interaction = Interaction(
-        user_id=interaction_in.user_id,
-        session_id=interaction_in.session_id,
-        product_id=interaction_in.product_id,
-        interaction_type=interaction_in.interaction_type.lower(),
-        weight=weight,
-        metadata_info=json.dumps(interaction_in.metadata_info or {})
-    )
-    db.add(interaction)
-    db.commit()
-    db.refresh(interaction)
-
-    return interaction
-
-@router.post("/feedback")
-def submit_recommendation_feedback(feedback_in: FeedbackCreate, db: Session = Depends(get_db)):
-    """Log user feedback (like/dislike) on recommended products."""
-    feedback = RecommendationFeedback(
-        user_id=feedback_in.user_id,
-        session_id=feedback_in.session_id,
-        product_id=feedback_in.product_id,
-        feedback_type=feedback_in.feedback_type.lower(),
-        recommendation_source=feedback_in.recommendation_source
-    )
-    db.add(feedback)
-
-    # Also log as weighted interaction
-    weight = settings.WEIGHT_FEEDBACK_POSITIVE if feedback_in.feedback_type.lower() == "like" else settings.WEIGHT_FEEDBACK_NEGATIVE
-    interaction = Interaction(
-        user_id=feedback_in.user_id,
-        session_id=feedback_in.session_id,
-        product_id=feedback_in.product_id,
-        interaction_type=f"feedback_{feedback_in.feedback_type.lower()}",
-        weight=weight,
-        metadata_info=json.dumps({"source": feedback_in.recommendation_source})
+        user_id=payload.user_id,
+        session_id=payload.session_id,
+        restaurant_id=payload.restaurant_id,
+        interaction_type=t,
+        weight=w,
+        metadata_info=json.dumps(payload.metadata_info or {})
     )
     db.add(interaction)
     db.commit()
 
-    return {"status": "success", "message": f"Feedback '{feedback_in.feedback_type}' recorded successfully."}
+    return {"status": "logged", "type": t, "weight": w}
+
+@router.post("/favorites")
+def toggle_favorite(
+    payload: FavoriteCreate,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Favorite).filter(Favorite.restaurant_id == payload.restaurant_id)
+    if payload.user_id:
+        query = query.filter(Favorite.user_id == payload.user_id)
+    elif payload.session_id:
+        query = query.filter(Favorite.session_id == payload.session_id)
+    
+    existing = query.first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"action": "removed", "is_favorite": False}
+    else:
+        new_fav = Favorite(
+            user_id=payload.user_id,
+            session_id=payload.session_id,
+            restaurant_id=payload.restaurant_id
+        )
+        db.add(new_fav)
+        
+        # Also log high-weight interaction for collaborative filtering
+        db.add(Interaction(
+            user_id=payload.user_id,
+            session_id=payload.session_id,
+            restaurant_id=payload.restaurant_id,
+            interaction_type="favorite",
+            weight=settings.WEIGHT_FAVORITE
+        ))
+        db.commit()
+        return {"action": "added", "is_favorite": True}
+
+@router.get("/favorites", response_model=List[RestaurantOut])
+def get_favorites(
+    user_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Favorite)
+    if user_id:
+        query = query.filter(Favorite.user_id == user_id)
+    elif session_id:
+        query = query.filter(Favorite.session_id == session_id)
+    else:
+        return []
+
+    favs = query.order_by(Favorite.created_at.desc()).all()
+    results = []
+    for f in favs:
+        r = f.restaurant
+        if r:
+            results.append(RestaurantOut(
+                id=r.id,
+                name=r.name,
+                description=r.description,
+                cuisine=r.cuisine,
+                cuisines_list=json.loads(r.cuisines_list or "[]"),
+                location=r.location,
+                area=r.area,
+                city=r.city,
+                rating=r.rating,
+                review_count=r.review_count,
+                price_for_two=r.price_for_two,
+                cost_category=r.cost_category,
+                veg_type=r.veg_type,
+                specialty_dishes=json.loads(r.specialty_dishes or "[]"),
+                opening_status=r.opening_status,
+                image=r.image,
+                food_gallery=json.loads(r.food_gallery or "[]"),
+                tags=json.loads(r.tags or "[]"),
+                match_score=96,
+                recommendation_reason="Saved in your personal favorites list.",
+                is_favorite=True
+            ))
+    return results
+
+@router.delete("/favorites/{restaurant_id}")
+def remove_favorite(
+    restaurant_id: int,
+    user_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Favorite).filter(Favorite.restaurant_id == restaurant_id)
+    if user_id:
+        query = query.filter(Favorite.user_id == user_id)
+    elif session_id:
+        query = query.filter(Favorite.session_id == session_id)
+
+    fav = query.first()
+    if fav:
+        db.delete(fav)
+        db.commit()
+        return {"status": "removed"}
+    return {"status": "not_found"}
+
+@router.get("/recently-viewed", response_model=List[RestaurantOut])
+def get_recently_viewed(
+    user_id: Optional[int] = Query(None),
+    session_id: Optional[str] = Query(None),
+    limit: int = Query(6),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Interaction).filter(Interaction.interaction_type.in_(["view", "click"]))
+    if user_id:
+        query = query.filter(Interaction.user_id == user_id)
+    elif session_id:
+        query = query.filter(Interaction.session_id == session_id)
+    else:
+        return []
+
+    recent_inters = query.order_by(Interaction.created_at.desc()).limit(20).all()
+    
+    seen_ids = set()
+    results = []
+    user_fav_ids = set()
+    if user_id:
+        favs = db.query(Favorite).filter(Favorite.user_id == user_id).all()
+        user_fav_ids = {f.restaurant_id for f in favs}
+
+    for inter in recent_inters:
+        r_id = inter.restaurant_id
+        if r_id not in seen_ids:
+            seen_ids.add(r_id)
+            r = inter.restaurant
+            if r:
+                results.append(RestaurantOut(
+                    id=r.id,
+                    name=r.name,
+                    description=r.description,
+                    cuisine=r.cuisine,
+                    cuisines_list=json.loads(r.cuisines_list or "[]"),
+                    location=r.location,
+                    area=r.area,
+                    city=r.city,
+                    rating=r.rating,
+                    review_count=r.review_count,
+                    price_for_two=r.price_for_two,
+                    cost_category=r.cost_category,
+                    veg_type=r.veg_type,
+                    specialty_dishes=json.loads(r.specialty_dishes or "[]"),
+                    opening_status=r.opening_status,
+                    image=r.image,
+                    food_gallery=json.loads(r.food_gallery or "[]"),
+                    tags=json.loads(r.tags or "[]"),
+                    match_score=90,
+                    recommendation_reason="Recently explored by you in Hyderabad.",
+                    is_favorite=r.id in user_fav_ids
+                ))
+            if len(results) >= limit:
+                break
+
+    return results

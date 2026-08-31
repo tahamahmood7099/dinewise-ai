@@ -1,13 +1,13 @@
 @echo off
 echo =========================================================================
-echo  BharatKart AI - E-Commerce Recommendation & Customer Behavior System
+echo  BharatBite AI - Food Recommendation & Customer Behavior System
 echo =========================================================================
 echo.
 echo Starting FastAPI Backend Server on http://127.0.0.1:8000 ...
-start "BharatKart AI Backend" cmd /k "cd /d %~dp0backend && python run.py"
+start "BharatBite AI Backend" cmd /k "cd /d %~dp0backend && python run.py"
 
 echo Starting Next.js Frontend Server on http://localhost:3000 ...
-start "BharatKart AI Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
+start "BharatBite AI Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
 echo.
 echo Application successfully launched!

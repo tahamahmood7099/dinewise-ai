@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import "./globals.css";
 import { ThemeProvider } from "../context/ThemeContext";
 import { AuthProvider } from "../context/AuthContext";
-import { CartWishlistProvider } from "../context/CartWishlistContext";
+import { FavoritesProvider } from "../context/FavoritesContext";
 import { InteractionTrackerProvider } from "../context/InteractionTracker";
+import { ToastProvider } from "../context/ToastContext";
+import DemoPersonaBar from "../components/DemoPersonaBar";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import SmartSearchModal from "../components/SmartSearchModal";
-import SmartCartDrawer from "../components/SmartCartDrawer";
 import AiAssistant from "../components/AiAssistant";
 
 export default function RootLayout({
@@ -17,32 +17,33 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <title>BharatKart AI — Intelligent Indian E-Commerce & Recommendation Engine</title>
-        <meta name="description" content="AI-Based E-Commerce Recommendation & Customer Behavior Intelligence System for India" />
+        <title>DineWise AI — Intelligent Restaurant Recommendation & Customer Behavior System</title>
+        <meta
+          name="description"
+          content="AI-Based Restaurant Recommendation & Customer Behavior Analysis System for Hyderabad & India"
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       </head>
-      <body className="min-h-screen flex flex-col antialiased">
+      <body className="min-h-screen flex flex-col antialiased bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors selection:bg-orange-500 selection:text-white">
         <ThemeProvider>
           <AuthProvider>
-            <CartWishlistProvider>
+            <FavoritesProvider>
               <InteractionTrackerProvider>
-                <Navbar onOpenSearchModal={() => setIsSearchModalOpen(true)} />
-                <main className="flex-1">
-                  {children}
-                </main>
-                <Footer />
-                <SmartSearchModal
-                  isOpen={isSearchModalOpen}
-                  onClose={() => setIsSearchModalOpen(false)}
-                />
-                <SmartCartDrawer />
-                <AiAssistant />
+                <ToastProvider>
+                  {/* High-visibility Live Demo Persona Bar */}
+                  <DemoPersonaBar />
+                  <Navbar />
+                  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+                    {children}
+                  </main>
+                  <Footer />
+                  <AiAssistant />
+                </ToastProvider>
               </InteractionTrackerProvider>
-            </CartWishlistProvider>
+            </FavoritesProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

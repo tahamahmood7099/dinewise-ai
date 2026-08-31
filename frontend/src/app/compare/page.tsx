@@ -1,242 +1,203 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import {
-  Scale, Plus, X, Sparkles, Check,
-  ShoppingCart, Star, ArrowRight
-} from "lucide-react";
-import { compareProducts, getProducts } from "../../lib/api";
-import { Product } from "../../types";
+import { Star, Plus, Check, Award, ArrowLeft, Store, MapPin } from "lucide-react";
+import { fetchRestaurants } from "../../lib/api";
+import { Restaurant } from "../../types";
 import { formatINR } from "../../lib/utils";
-import { useCartWishlist } from "../../context/CartWishlistContext";
 
-function CompareContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const { addItemToCart } = useCartWishlist();
-
-  const [comparedProducts, setComparedProducts] = useState<Product[]>([]);
-  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
-  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([1, 2]); // Default compare Manyavar vs FabIndia
+export default function CompareRestaurantsPage() {
+  const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([]);
+  const [selectedRestaurants, setSelectedRestaurants] = useState<Restaurant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const rawIds = searchParams.get("ids");
-    if (rawIds) {
-      const parsed = rawIds.split(",").map((i) => Number(i.trim())).filter((i) => !isNaN(i) && i > 0);
-      if (parsed.length > 0) setSelectedProductIds(parsed.slice(0, 3));
-    }
-  }, [searchParams]);
+    fetchRestaurants({ limit: 20 })
+      .then((res) => {
+        setAllRestaurants(res || []);
+        if (res && res.length >= 2) {
+          setSelectedRestaurants([res[0], res[1]]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
 
-  useEffect(() => {
-    const loadComparison = async () => {
-      setIsLoading(true);
-      try {
-        const [allProds, compResult] = await Promise.all([
-          getProducts({ limit: 40 }),
-          compareProducts(selectedProductIds.length > 0 ? selectedProductIds : [1, 2]),
-        ]);
-        setAvailableProducts(allProds || []);
-        setComparedProducts(compResult || []);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadComparison();
-  }, [selectedProductIds]);
-
-  const addProductToComparison = (pid: number) => {
-    if (selectedProductIds.length < 3 && !selectedProductIds.includes(pid)) {
-      const updated = [...selectedProductIds, pid];
-      setSelectedProductIds(updated);
-      router.push(`/compare?ids=${updated.join(",")}`);
+  const addSlot = (rest: Restaurant) => {
+    if (selectedRestaurants.length < 3 && !selectedRestaurants.some((r) => r.id === rest.id)) {
+      setSelectedRestaurants([...selectedRestaurants, rest]);
     }
   };
 
-  const removeProductFromComparison = (pid: number) => {
-    const updated = selectedProductIds.filter((id) => id !== pid);
-    setSelectedProductIds(updated);
-    router.push(`/compare?ids=${updated.join(",")}`);
+  const removeSlot = (id: number) => {
+    setSelectedRestaurants(selectedRestaurants.filter((r) => r.id !== id));
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="space-y-8 pb-16">
+      <Link
+        href="/restaurants"
+        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-orange-600 transition"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Restaurants
+      </Link>
+
       <div>
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-          <Scale className="w-7 h-7 text-orange-600" />
-          <span>Product Comparison Matrix (Up to 3 Items)</span>
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+          Compare Hyderabad Restaurants
         </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Side-by-side attribute comparison with grounded "Best Value Choice" intelligence
+        <p className="text-xs sm:text-sm text-slate-500">
+          Compare up to 3 restaurants side-by-side on ratings, price for two, cuisine, specialties, and location
         </p>
       </div>
 
-      {/* Add More Products Quick Bar */}
-      {selectedProductIds.length < 3 && (
-        <div className="p-4 rounded-2xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200 dark:border-orange-800 flex items-center justify-between gap-4 text-xs">
-          <div className="flex items-center gap-2">
-            <Plus className="w-4 h-4 text-orange-600" />
-            <span className="font-semibold text-slate-900 dark:text-white">
-              Add a {selectedProductIds.length === 1 ? "second" : "third"} product to compare:
-            </span>
-          </div>
-
-          <select
-            onChange={(e) => {
-              if (e.target.value) addProductToComparison(Number(e.target.value));
-            }}
-            className="p-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-slate-900 dark:text-white"
-            defaultValue=""
-          >
-            <option value="" disabled>Choose a product...</option>
-            {availableProducts
-              .filter((p) => !selectedProductIds.includes(p.id))
-              .map((p) => (
-                <option key={p.id} value={p.id}>{p.brand} — {p.name}</option>
-              ))}
-          </select>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="p-12 text-center text-slate-400">Loading comparison matrix...</div>
-      ) : comparedProducts.length === 0 ? (
-        <div className="p-12 text-center bg-white dark:bg-slate-800 rounded-2xl border">
-          <h3 className="font-bold text-base">Select products to compare</h3>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-800/90 rounded-3xl border border-slate-200 dark:border-slate-700 overflow-x-auto shadow-sm">
-          <table className="w-full text-left text-xs border-collapse">
+      {/* Comparison Matrix Table */}
+      {selectedRestaurants.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[600px]">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
-                <th className="p-5 font-bold text-slate-400 w-1/4 uppercase tracking-wider">
-                  Product Attributes
+              <tr className="border-b border-slate-200 dark:border-slate-800">
+                <th className="pb-4 w-1/4 text-slate-400 uppercase text-[10px] font-bold">
+                  Attributes
                 </th>
-                {comparedProducts.map((p) => (
-                  <th key={p.id} className="p-5 w-1/3 min-w-[240px] align-top">
-                    <div className="relative space-y-3">
-                      {/* Remove Button */}
-                      {comparedProducts.length > 1 && (
-                        <button
-                          onClick={() => removeProductFromComparison(p.id)}
-                          className="absolute -top-2 -right-2 p-1.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      <img src={p.image} alt={p.name} className="w-full h-36 rounded-2xl object-cover bg-slate-100 dark:bg-slate-800" />
-                      
-                      {p.recommendation_reason?.includes("Best Value") && (
-                        <span className="inline-flex items-center gap-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-full shadow-sm">
-                          <Sparkles className="w-3 h-3" /> BEST VALUE CHOICE
-                        </span>
-                      )}
-
-                      <div>
-                        <span className="text-[10.5px] font-bold uppercase text-orange-600 dark:text-orange-400">
-                          {p.brand}
-                        </span>
-                        <h4 className="font-bold text-sm text-slate-900 dark:text-white line-clamp-2 mt-0.5">
-                          {p.name}
-                        </h4>
+                {selectedRestaurants.map((rest) => (
+                  <th key={rest.id} className="pb-4 w-1/4">
+                    <div className="space-y-2">
+                      <div className="relative aspect-[16/10] w-full rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                        <Image
+                          src={rest.image}
+                          alt={rest.name}
+                          fill
+                          className="object-cover"
+                        />
                       </div>
-
-                      <button
-                        onClick={() => addItemToCart(p, 1)}
-                        className="w-full py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-                      >
-                        <ShoppingCart className="w-3.5 h-3.5" /> Add to Cart
-                      </button>
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-sm text-slate-900 dark:text-white truncate">
+                          {rest.name}
+                        </span>
+                        <button
+                          onClick={() => removeSlot(rest.id)}
+                          className="text-[10px] text-rose-500 font-bold hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Price (INR)</td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 font-black text-sm text-slate-900 dark:text-white">
-                    {formatINR(p.price)}
-                    {p.discount > 0 && <span className="ml-1.5 text-xs text-rose-600 font-bold">({p.discount}% OFF)</span>}
+                <td className="py-3.5 font-bold text-slate-500">Foodie Rating</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 font-semibold text-emerald-600">
+                    <div className="flex items-center gap-1 font-black text-sm">
+                      <span>{r.rating.toFixed(1)}★</span>
+                      <span className="text-slate-400 text-[10.5px] font-normal">
+                        ({r.review_count}+ reviews)
+                      </span>
+                    </div>
                   </td>
                 ))}
               </tr>
-
               <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Customer Rating</td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 font-bold text-slate-800 dark:text-slate-200">
-                    <span className="inline-flex items-center gap-1 bg-emerald-600 text-white px-2 py-0.5 rounded text-[11px]">
-                      {p.rating} <Star className="w-3 h-3 fill-white" />
+                <td className="py-3.5 font-bold text-slate-500">Price for Two</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 font-black text-sm text-slate-900 dark:text-white">
+                    {formatINR(r.price_for_two)}{" "}
+                    <span className="text-[10px] text-slate-400 font-normal">({r.cost_category})</span>
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <td className="py-3.5 font-bold text-slate-500">Primary Cuisine</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 font-bold text-orange-600">
+                    {r.cuisine}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <td className="py-3.5 font-bold text-slate-500">Dietary Type</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 font-semibold">
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
+                        r.veg_type === "veg"
+                          ? "bg-emerald-500/10 text-emerald-600"
+                          : r.veg_type === "non_veg"
+                          ? "bg-rose-500/10 text-rose-600"
+                          : "bg-amber-500/10 text-amber-600"
+                      }`}
+                    >
+                      {r.veg_type === "veg" ? "Pure Vegetarian" : r.veg_type === "non_veg" ? "Non-Veg" : "Veg & Non-Veg"}
                     </span>
-                    <span className="text-slate-400 font-normal ml-1">({p.review_count} reviews)</span>
                   </td>
                 ))}
               </tr>
-
               <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Category</td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 font-medium text-slate-700 dark:text-slate-300">
-                    {p.category}
+                <td className="py-3.5 font-bold text-slate-500">Location & Area</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 text-slate-700 dark:text-slate-300 font-medium">
+                    {r.area}
+                    <span className="block text-[10.5px] text-slate-400">{r.location}</span>
                   </td>
                 ))}
               </tr>
-
               <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Available Colors</td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 text-slate-700 dark:text-slate-300 font-medium">
-                    {p.colors || "Standard"}
+                <td className="py-3.5 font-bold text-slate-500">Signature Specialties</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-3.5 text-slate-600 dark:text-slate-400">
+                    {r.specialty_dishes.slice(0, 3).join(", ")}
                   </td>
                 ))}
               </tr>
-
               <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Stock Availability</td>
-                {comparedProducts.map((p) => (
-                  <td key={p.id} className="p-4 font-bold text-emerald-600">
-                    In Stock ({p.stock} units available in India)
+                <td className="py-4 font-bold text-slate-500">View Page</td>
+                {selectedRestaurants.map((r) => (
+                  <td key={r.id} className="py-4">
+                    <Link
+                      href={`/restaurants/${r.id}`}
+                      className="inline-flex items-center justify-center w-full py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs transition shadow"
+                    >
+                      View Details →
+                    </Link>
                   </td>
                 ))}
-              </tr>
-
-              <tr>
-                <td className="p-4 font-semibold text-slate-500 bg-slate-50/50 dark:bg-slate-900/30">Key Highlights</td>
-                {comparedProducts.map((p) => {
-                  const feats = p.features ? JSON.parse(p.features) : [];
-                  return (
-                    <td key={p.id} className="p-4 text-slate-600 dark:text-slate-300">
-                      <ul className="space-y-1">
-                        {feats.map((f: string, i: number) => (
-                          <li key={i} className="flex items-center gap-1.5">
-                            <Check className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                            <span>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  );
-                })}
               </tr>
             </tbody>
           </table>
         </div>
       )}
-    </div>
-  );
-}
 
-export default function ComparePage() {
-  return (
-    <Suspense fallback={<div className="max-w-7xl mx-auto p-8 text-center text-slate-400">Loading comparison...</div>}>
-      <CompareContent />
-    </Suspense>
+      {/* Select More Restaurants */}
+      {selectedRestaurants.length < 3 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            Add Another Hyderabad Restaurant to Comparison:
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {allRestaurants
+              .filter((r) => !selectedRestaurants.some((s) => s.id === r.id))
+              .slice(0, 4)
+              .map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => addSlot(r)}
+                  className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-orange-500 text-left transition flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {r.name}
+                  </span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

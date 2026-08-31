@@ -1,279 +1,170 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# Auth Schemas
-class UserRegister(BaseModel):
+# ================= USER SCHEMAS =================
+class UserBase(BaseModel):
     name: str
     email: str
+    city: Optional[str] = "Hyderabad"
+    dietary_pref: Optional[str] = "All"
+    preferred_budget: Optional[str] = "Moderate"
+    preferred_cuisines: Optional[List[str]] = []
+    preferred_areas: Optional[List[str]] = []
+
+class UserCreate(UserBase):
     password: str
-    city: Optional[str] = "Mumbai"
-    preferred_categories: Optional[List[str]] = []
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
-class UserResponse(BaseModel):
+class UserOut(UserBase):
     id: int
-    name: str
-    email: str
     role: str
-    city: Optional[str] = "Mumbai"
-    preferences: Optional[str] = "{}"
     created_at: datetime
-
+    
     class Config:
         from_attributes = True
 
-class TokenResponse(BaseModel):
+class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: UserResponse
+    user: UserOut
 
-# Product Schemas
-class ProductBase(BaseModel):
+# ================= RESTAURANT SCHEMAS =================
+class RestaurantBase(BaseModel):
     name: str
     description: str
-    category: str
-    brand: str
-    price: float
-    original_price: float
-    discount: int = 0
+    cuisine: str
+    cuisines_list: List[str] = []
+    location: str
+    area: str
+    city: str = "Hyderabad"
     rating: float = 4.5
-    review_count: int = 0
+    review_count: int = 150
+    price_for_two: float
+    cost_category: str = "Moderate" # 'Budget Friendly', 'Moderate', 'Premium / Fine Dining'
+    veg_type: str = "both" # 'veg', 'non_veg', 'both'
+    specialty_dishes: List[str] = []
+    opening_status: str = "Open Now (11:00 AM - 11:30 PM)"
     image: str
-    additional_images: Optional[str] = "[]"
-    tags: Optional[str] = ""
-    colors: Optional[str] = "Standard"
-    stock: int = 50
-    features: Optional[str] = "[]"
+    food_gallery: List[str] = []
+    tags: List[str] = []
 
-class ProductCreate(ProductBase):
+class RestaurantCreate(RestaurantBase):
     pass
 
-class ProductResponse(ProductBase):
+class RestaurantOut(RestaurantBase):
     id: int
-    created_at: datetime
-    match_score: Optional[int] = None # Calculated on the fly (0-100%)
-    recommendation_reason: Optional[str] = None # Explainable AI reason
+    match_score: Optional[int] = 85
+    recommendation_reason: Optional[str] = None
+    is_favorite: Optional[bool] = False
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
-# Category Schema
-class CategoryResponse(BaseModel):
+class CuisineOut(BaseModel):
     id: int
     name: str
     slug: str
-    image: Optional[str] = None
-    description: Optional[str] = None
+    description: Optional[str] = ""
+    image: Optional[str] = ""
 
     class Config:
         from_attributes = True
 
-# Interaction Schemas
+# ================= INTERACTION & FAVORITES =================
 class InteractionCreate(BaseModel):
+    restaurant_id: int
+    interaction_type: str # 'view', 'click', 'search', 'favorite', 'rating', 'recommendation_click', 'like', 'dislike'
     user_id: Optional[int] = None
     session_id: Optional[str] = None
-    product_id: int
-    interaction_type: str # 'view', 'click', 'search', 'wishlist', 'cart', 'purchase', 'feedback'
     metadata_info: Optional[Dict[str, Any]] = {}
 
-class InteractionResponse(BaseModel):
+class FavoriteCreate(BaseModel):
+    restaurant_id: int
+    user_id: Optional[int] = None
+    session_id: Optional[str] = None
+
+class RatingCreate(BaseModel):
+    restaurant_id: int
+    rating_score: float # 1.0 - 5.0
+    review_text: Optional[str] = ""
+    user_id: Optional[int] = None
+
+class RatingOut(BaseModel):
     id: int
+    restaurant_id: int
     user_id: Optional[int]
-    session_id: Optional[str]
-    product_id: int
-    interaction_type: str
-    weight: float
-    timestamp: datetime
-
-    class Config:
-        from_attributes = True
-
-# Cart & Wishlist Schemas
-class CartItemAdd(BaseModel):
-    product_id: int
-    quantity: int = 1
-    session_id: Optional[str] = None
-
-class CartItemUpdate(BaseModel):
-    quantity: int
-
-class CartItemResponse(BaseModel):
-    id: int
-    product_id: int
-    quantity: int
-    product: ProductResponse
-
-    class Config:
-        from_attributes = True
-
-class WishlistItemAdd(BaseModel):
-    product_id: int
-    session_id: Optional[str] = None
-
-class WishlistItemResponse(BaseModel):
-    id: int
-    product_id: int
-    product: ProductResponse
-
-    class Config:
-        from_attributes = True
-
-# Order Schemas
-class OrderItemCreate(BaseModel):
-    product_id: int
-    quantity: int
-
-class OrderCreate(BaseModel):
-    items: List[OrderItemCreate]
-    payment_method: str = "UPI" # 'UPI', 'COD', 'Card'
-    shipping_name: str
-    shipping_phone: str
-    shipping_address: str
-    shipping_city: str
-    shipping_state: str
-    shipping_pincode: str
-    session_id: Optional[str] = None
-
-class OrderItemResponse(BaseModel):
-    id: int
-    product_id: int
-    product_name: str
-    price: float
-    quantity: int
-    image: str
-
-    class Config:
-        from_attributes = True
-
-class OrderResponse(BaseModel):
-    id: int
-    order_number: str
-    user_id: Optional[int]
-    total_amount: float
-    discount_amount: float
-    payment_method: str
-    payment_status: str
-    order_status: str
-    shipping_name: str
-    shipping_phone: str
-    shipping_address: str
-    shipping_city: str
-    shipping_state: str
-    shipping_pincode: str
+    user_name: Optional[str] = "Foodie"
+    rating_score: float
+    review_text: str
     created_at: datetime
-    items: List[OrderItemResponse]
 
     class Config:
         from_attributes = True
 
-# Recommendation Schemas
-class RecommendationRequest(BaseModel):
-    user_id: Optional[int] = None
-    session_id: Optional[str] = None
-    product_id: Optional[int] = None
-    category: Optional[str] = None
-    limit: int = 8
-    diversity_penalty: float = 0.2
-
-class FeedbackCreate(BaseModel):
-    user_id: Optional[int] = None
-    session_id: Optional[str] = None
-    product_id: int
-    feedback_type: str # 'like' or 'dislike'
-    recommendation_source: Optional[str] = "hybrid"
-
-# Search & NLP Schemas
-class SearchQuery(BaseModel):
+# ================= SEARCH & NLP =================
+class SearchResponse(BaseModel):
     query: str
-    user_id: Optional[int] = None
-    session_id: Optional[str] = None
-    category: Optional[str] = None
-    min_price: Optional[float] = None
-    max_price: Optional[float] = None
-    brand: Optional[str] = None
-    sort_by: Optional[str] = "relevance" # 'relevance', 'price_asc', 'price_desc', 'rating', 'newest'
-    limit: int = 24
-    offset: int = 0
+    nlp_intent: Dict[str, Any]
+    restaurants: List[RestaurantOut]
+    total_count: int
 
-class ParsedNLPIntent(BaseModel):
-    original_query: str
-    detected_category: Optional[str] = None
-    detected_brand: Optional[str] = None
-    detected_color: Optional[str] = None
-    detected_keywords: List[str] = []
-    min_price: Optional[float] = None
-    max_price: Optional[float] = None
-    intent_type: str = "product_search"
+# ================= RECOMMENDATIONS FEED =================
+class HomepageFeed(BaseModel):
+    picked_for_you: List[RestaurantOut]
+    trending_hyderabad: List[RestaurantOut]
+    top_rated: List[RestaurantOut]
+    budget_friendly: List[RestaurantOut]
+    near_location: List[RestaurantOut]
+    explore_new: List[RestaurantOut]
+    cuisines: List[CuisineOut]
 
-class SearchResultResponse(BaseModel):
-    query: str
-    corrected_query: Optional[str] = None
-    parsed_intent: ParsedNLPIntent
-    total_results: int
-    products: List[ProductResponse]
-    suggested_categories: List[str] = []
-    suggested_brands: List[str] = []
-
-# Assistant Schemas
-class AssistantMessage(BaseModel):
-    role: str # 'user' or 'assistant'
+# ================= AI ASSISTANT =================
+class AssistantHistoryItem(BaseModel):
+    role: str
     content: str
 
 class AssistantRequest(BaseModel):
     message: str
-    conversation_history: List[AssistantMessage] = []
+    history: Optional[List[AssistantHistoryItem]] = []
     user_id: Optional[int] = None
     session_id: Optional[str] = None
 
 class AssistantResponse(BaseModel):
     reply: str
-    parsed_intent: Optional[ParsedNLPIntent] = None
-    products: List[ProductResponse] = []
+    restaurants: List[RestaurantOut] = []
+    extracted_filters: Dict[str, Any] = {}
     suggestions: List[str] = []
 
-# Admin & Analytics Schemas
+# ================= ADMIN & ANALYTICS =================
 class OverviewStats(BaseModel):
     total_users: int
-    total_products: int
+    active_users_today: int
+    total_restaurants: int
+    total_cuisines: int
     total_interactions: int
-    total_orders: int
-    total_revenue: float
+    total_favorites: int
+    total_searches: int
+    recommendation_impressions: int
     recommendation_ctr: float
-    avg_order_value: float
+    recommendation_acceptance_rate: float
 
 class CustomerSegmentItem(BaseModel):
     user_id: int
     name: str
     email: str
-    total_spend: float
-    total_orders: int
+    segment: str
+    preferred_cuisine: str
+    preferred_area: str
     total_interactions: int
-    segment: str # 'Budget Shopper', 'Premium Buyer', 'Frequent Buyer', 'Window Shopper'
-    preferred_category: str
+    total_favorites: int
+    avg_budget_affinity: float
 
-class DemandIntelligenceItem(BaseModel):
-    product_id: int
-    product_name: str
-    category: str
-    price: float
-    image: str
-    views: int
-    cart_adds: int
-    purchases: int
-    conversion_rate: float
-    label: str # "High Interest, Low Conversion", "High Performer", "Underperforming"
-
-class ZeroResultSearchItem(BaseModel):
-    query: str
-    count: int
-    last_searched: datetime
-
-# Model Evaluation Schemas
-class EvaluationMetrics(BaseModel):
+class ModelEvaluationMetrics(BaseModel):
     model_name: str
     precision_at_k: float
     recall_at_k: float
