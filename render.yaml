@@ -1,0 +1,18 @@
+services:
+  # Backend FastAPI Web Service
+  - type: web
+    name: bharatkart-ai-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "cd backend && pip install -r requirements.txt"
+    startCommand: "cd backend && python run.py"
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DATABASE_URL
+        value: "sqlite:///./bharatkart.db"
+      - key: ALPHA_CONTENT_WEIGHT
+        value: "0.6"
+      - key: BETA_COLLAB_WEIGHT
+        value: "0.4"
