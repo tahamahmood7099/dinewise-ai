@@ -7,7 +7,6 @@ import { AuthProvider } from "../context/AuthContext";
 import { FavoritesProvider } from "../context/FavoritesContext";
 import { InteractionTrackerProvider } from "../context/InteractionTracker";
 import { ToastProvider } from "../context/ToastContext";
-import DemoPersonaBar from "../components/DemoPersonaBar";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import AiAssistant from "../components/AiAssistant";
@@ -33,8 +32,6 @@ export default function RootLayout({
             <FavoritesProvider>
               <InteractionTrackerProvider>
                 <ToastProvider>
-                  {/* High-visibility Live Demo Persona Bar */}
-                  <DemoPersonaBar />
                   <Navbar />
                   <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
                     {children}
