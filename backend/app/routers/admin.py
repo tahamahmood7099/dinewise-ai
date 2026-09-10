@@ -42,10 +42,12 @@ def get_admin_overview(db: Session = Depends(get_db)):
     )
 
 @router.get("/segments", response_model=List[CustomerSegmentItem])
+@router.get("/segmentation", response_model=List[CustomerSegmentItem])
 def get_customer_segments(db: Session = Depends(get_db)):
     return customer_segmentation_engine.segment_users(db)
 
 @router.get("/searches")
+@router.get("/search-analytics")
 def get_search_analytics(db: Session = Depends(get_db)):
     logs = db.query(SearchLog).order_by(SearchLog.created_at.desc()).limit(50).all()
     
@@ -76,6 +78,7 @@ def get_search_analytics(db: Session = Depends(get_db)):
     }
 
 @router.get("/evaluation", response_model=List[ModelEvaluationMetrics])
+@router.get("/model-evaluation", response_model=List[ModelEvaluationMetrics])
 def get_model_evaluation(db: Session = Depends(get_db)):
     return recommendation_eval_engine.evaluate_models(db, k=5)
 

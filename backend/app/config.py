@@ -4,7 +4,11 @@ class Settings:
     PROJECT_NAME: str = "DineWise AI - AI-Based Restaurant Recommendation & Customer Behavior Analysis System"
     API_V1_STR: str = "/api"
     
-    _raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///./dinewise.db")
+    # In serverless/cloud environments, default to /tmp/dinewise.db if running on vercel/aws/lambda
+    _is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    _default_sqlite = "/tmp/dinewise.db" if _is_serverless else "./dinewise.db"
+    
+    _raw_db_url = os.environ.get("DATABASE_URL", f"sqlite:///{_default_sqlite}")
     if _raw_db_url.startswith("postgres://"):
         _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
     DATABASE_URL: str = _raw_db_url

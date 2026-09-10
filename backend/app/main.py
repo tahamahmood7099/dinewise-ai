@@ -62,3 +62,25 @@ def health_check():
         "recommendation_engine": "Hybrid (0.6 * Content + 0.4 * Collaborative)",
         "region": "Hyderabad, Telangana, India"
     }
+
+@app.get("/categories")
+@app.get("/api/categories")
+def get_all_categories():
+    from .database import SessionLocal
+    from .models import CuisineCategory
+    db = SessionLocal()
+    try:
+        cats = db.query(CuisineCategory).all()
+        return [
+            {
+                "id": c.id,
+                "name": c.name,
+                "slug": c.slug,
+                "description": c.description,
+                "image": c.image
+            }
+            for c in cats
+        ]
+    finally:
+        db.close()
+

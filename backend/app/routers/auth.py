@@ -8,6 +8,25 @@ from ..utils.security import verify_password, get_password_hash, create_access_t
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+@router.get("/demo-users")
+def get_demo_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    results = []
+    for u in users:
+        results.append({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "role": u.role,
+            "city": u.city,
+            "dietary_pref": u.dietary_pref,
+            "preferred_budget": u.preferred_budget,
+            "preferred_cuisines": json.loads(u.preferred_cuisines or "[]"),
+            "preferred_areas": json.loads(u.preferred_areas or "[]"),
+            "persona_tag": "Biryani Enthusiast" if "Biryani" in (u.preferred_cuisines or "") else ("Vegetarian Explorer" if u.dietary_pref == "Pure Veg" else "Fine Dining Explorer")
+        })
+    return results
+
 @router.post("/register", response_model=Token)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
