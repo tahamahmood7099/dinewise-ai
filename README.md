@@ -1,46 +1,35 @@
-# BharatBite AI — AI-Based Food Recommendation & Customer Behavior Intelligence System
-**Final Year CSE Major Project • Osmania University / NSAKCET**
+# DineWise AI — AI-Based Restaurant Recommendation & Customer Behavior Analysis System
+**Final Year B.E. CSE Major Project • Osmania University / NSAKCET (Autonomous)**
 
-BharatBite AI is an authentic, India-first, Hyderabad-focused food discovery and recommendation intelligence platform powered by hybrid machine learning.
-
----
-
-## 🍽️ Key Highlights & Indian Food Context
-* **Hyderabad-Centric & Pan-Indian Delicacies:**
-  * Authentic Hyderabadi Mutton & Chicken Dum Biryanis (Paradise, Shah Ghouse, Bawarchi)
-  * GI-Tagged Royal Mutton Haleem (Pista House)
-  * Fiery Andhra Chicken 65
-  * Middle-Eastern Charcoal Grilled Chicken Shawarma Rolls
-  * Pure-Veg Ghee Babai Butter Dosa & Steamed Button Idlis (Chutneys)
-  * Historic Charminar Irani Dum Chai & Osmania Biscuits (Nimrah Cafe & Bakery)
-  * Royal Qubani Ka Meetha with Fresh Cream, Double Ka Meetha & Desi Ghee Gulab Jamun (Dadu's Mithai Vatika)
-  * Murgh Makhani Butter Chicken, Paneer Butter Masala & Garlic Naans (Punjabi Grill)
-  * Artisanal Sourdough Cheese Burst Pizzas & Smash Burgers (Slice & Crust)
-* **Indian Currency (₹ INR) & Hyderabad Logistics:** Pricing, cart totals, delivery fees (₹30 / FREE over ₹400), platform fees (₹5), and Indian addresses with PIN codes.
-* **Simulated Indian Checkout:** UPI (GPay / PhonePe / Paytm / BHIM) and Cash on Delivery simulation.
+**Live Public Demo:**
+* **Frontend:** [https://dinewise-ai.vercel.app](https://dinewise-ai.vercel.app/)
+* **Backend API & Swagger:** [https://dinewise-ai.onrender.com/docs](https://dinewise-ai.onrender.com/docs)
+* **GitHub Repository:** [https://github.com/tahamahmood7099/dinewise-ai.git](https://github.com/tahamahmood7099/dinewise-ai.git)
 
 ---
 
-## 🤖 AI / ML Architecture & Recommendation Engines
+## 👥 Project Team Members
+1. **Nadeem** — B.E. Computer Science and Engineering
+2. **Kamran** — B.E. Computer Science and Engineering
+3. **Abdul Bari** — B.E. Computer Science and Engineering
 
-1. **Content-Based Filtering (TF-IDF + Cosine Similarity):**
-   * Computes semantic cosine similarity over dish textual signals: cuisine, category, ingredients, spice level, and veg/non-veg status.
-2. **Collaborative Filtering (User-Dish Interaction Matrix):**
-   * Weights user behavior telemetry: `View` = 1.0, `Click` = 2.0, `Search` = 3.0, `Favorite` = 5.0, `Cart` = 7.0, `Order` = 10.0, `Like` = +8.0, `Dislike` = -10.0.
-   * Computes User-User taste similarity and Item-Item co-occurrence (for complementary pairings like Biryani + Mirchi Salan/Gulab Jamun).
-3. **Hybrid Recommendation Engine:**
-   * Formula: $$\text{Hybrid Score}(u, d) = \alpha \cdot \text{Content}(u, d) + \beta \cdot \text{Collab}(u, d)$$ with configured weights ($\alpha = 0.6, \beta = 0.4$).
-   * Features diversity penalties to prevent category repetition and negative feedback down-weighting.
-4. **Explainable AI (XAI):**
-   * Every single recommendation attaches a data-grounded rationale (e.g., *"Personalized for you: Matches your frequent craving for Biryani & loved by foodies with similar taste"*).
-5. **Food NLP & Typo-Tolerant Search Parser:**
-   * Extracts constraints: Category, Cuisine, Spice preference ('Mild', 'Medium', 'Spicy', 'Extra Spicy'), Veg/Non-Veg, and Budget Caps from English and Hinglish queries (e.g., *"biryani under 300"*, *"200 ke andar biryani"*, *"spicy chicken"*, *"biriyani"* $\rightarrow$ *"biryani"*).
-6. **AI Food Concierge:**
-   * Floating shopping assistant grounded in the food database.
-7. **Food Customer Behavioral Segmentation:**
-   * Segments: `Biryani Lovers`, `Budget Foodies`, `Premium Diners`, `Dessert Lovers`, `Healthy Food Seekers`, and `Explorer / Variety Seekers`.
-8. **Recommendation Model Evaluation Benchmarks:**
-   * Evaluates `Popularity Baseline`, `Content-Based`, `Collaborative Filtering`, and `Hybrid Engine` using **Precision@K**, **Recall@K**, **F1-Score**, and **NDCG@K**.
+*Department of Computer Science and Engineering*  
+*Nawab Shah Alam Khan College of Engineering & Technology (Autonomous), Malakpet, Hyderabad*  
+*Affiliated to Osmania University, Hyderabad (2026–2027)*
+
+---
+
+## 🍽️ Project Overview
+**DineWise AI** is an intelligent restaurant recommendation and customer behavior intelligence system designed specifically for the diverse urban dining ecosystem of Hyderabad. 
+
+Traditional platforms rely primarily on static popularity rankings, sponsored bids, and distance filters. DineWise AI introduces a personalized, transparent, and explainable recommendation engine combining:
+1. **Content-Based Filtering (TF-IDF + Cosine Similarity):** Matches restaurant culinary attributes, specialty dishes, dining tags, and price categories with individual user taste profiles.
+2. **Collaborative Filtering (Implicit Interaction Matrix):** Extracts latent community dining patterns across weighted user interactions (views, favorites, ratings, and recommendation feedback).
+3. **Hybrid Recommendation Engine ($\alpha=0.6, \beta=0.4$):** Linearly fuses Content-Based (60%) and Collaborative (40%) scores to eliminate cold-start bottlenecks while maximizing discovery diversity.
+4. **Explainable AI (XAI):** Provides interactive factor score breakdowns (Cuisine, Zone, Price, and Dietary match) to explain why each venue is recommended.
+5. **Natural Language Query Parser:** Extracts multi-faceted constraints (cuisine, dining zone, budget ceiling, veg-only status) from unstructured freeform text with typo tolerance.
+6. **Customer Behavioral Clustering:** Segment users into distinct dining personas (Biryani Enthusiast, Vegetarian Explorer, Premium Diner, Budget Explorer).
+7. **Offline Model Evaluation Benchmarks:** Benchmarks algorithms on Precision@5 (0.600), Recall@5 (0.875), and NDCG@5 (0.873).
 
 ---
 
@@ -50,13 +39,15 @@ BharatBite AI is an authentic, India-first, Hyderabad-focused food discovery and
 * Python 3.10+
 * Node.js 18+ and npm
 
-### 1. Launch with One Click
+### 1. Launch with One Click (Windows)
 Double-click `start_project.bat` in the project root directory.
 
 ### 2. Manual Startup
+
 **Backend (FastAPI):**
 ```bash
 cd backend
+pip install -r requirements.txt
 python run.py
 ```
 *Backend runs on `http://127.0.0.1:8000` (Interactive API docs at `http://127.0.0.1:8000/docs`)*
@@ -64,15 +55,16 @@ python run.py
 **Frontend (Next.js):**
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 *Frontend runs on `http://localhost:3000`*
 
 ---
 
-## 👥 Demo Foodie Personas for Presentation
-Switch personas instantly from the Navbar user menu:
-1. **Aarav Sharma** (`aarav.sharma@example.in` / `password123`): High affinity for Biryani & Spicy Non-Veg.
-2. **Priya Patel** (`priya.patel@example.in` / `password123`): High affinity for Pure Veg, Ghee Dosas & Sweets.
-3. **Ananya Mukherjee** (`ananya.m@example.in` / `password123`): High affinity for Mutton Haleem & Qubani Ka Meetha.
-4. **Admin Nadeem** (`admin@bharatbite.in` / `adminpassword`): Full access to Admin BI Telemetry & Model Evaluation.
+## 📂 Academic Documentation Package
+The `documentation_package/` directory contains complete academic deliverables formatted to university specifications:
+* `DineWise_AI_Major_Project_Abstract_Synopsis.pdf`
+* `DineWise_AI_Research_Base_Paper.pdf` (33-section IEEE format with 10 genuine citations)
+* `DineWise_AI_Final_Presentation_Slides.pdf` (13-slide landscape presentation deck)
+* `DineWise_AI_Complete_Major_Project_Report.pdf` (Full SRS, UML, ER, and Architecture report)
